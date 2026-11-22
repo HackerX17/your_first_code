@@ -119,6 +119,7 @@ function proj(lane, d) {
 }
 
 // ---------- game state ----------
+const RESOLVE_GRACE = 35; // world units past the army's front line before an object counts
 const START = 5, SCROLL = 300, RUSH = 150, BOLT_SPEED = 1500;
 let level = Math.max(1, +(store.get("legion-level-v2") || 1));
 let muted = store.get("legion-muted") === "1";
@@ -229,16 +230,36 @@ function setMuted(m) { muted = m; store.set("legion-muted", m ? "1" : "0"); $("m
 setMuted(muted);
 
 // ---------- input ----------
-let pointerDown = false;
+// Steering: a tap jumps straight to the lane under your finger; a swipe moves
+// one lane per ~40px of travel, measured from where the finger went down.
+let touch = null;
+const SWIPE_STEP = 40;
 const laneFromX = x => clamp(Math.floor(x / (W / 3)), 0, 2);
-addEventListener("pointerdown", e => { if (e.target.closest && e.target.closest("button")) return; initAudio(); pointerDown = true; if (phase === "run") lane = laneFromX(e.clientX); });
-addEventListener("pointermove", e => { if (pointerDown && phase === "run") lane = laneFromX(e.clientX); });
-addEventListener("pointerup", () => pointerDown = false);
-addEventListener("pointercancel", () => pointerDown = false);
+function setLane(l) {
+  l = clamp(l, 0, 2);
+  if (l === lane || phase !== "run") return;
+  lane = l;
+  try { navigator.vibrate && navigator.vibrate(8); } catch (e) {}
+}
+addEventListener("pointerdown", e => {
+  if (e.target.closest && e.target.closest("button")) return;
+  initAudio();
+  touch = { id: e.pointerId, x0: e.clientX, before: lane, swiping: false };
+  setLane(laneFromX(e.clientX));
+}, { passive: true });
+addEventListener("pointermove", e => {
+  if (!touch || e.pointerId !== touch.id) return;
+  const dx = e.clientX - touch.x0;
+  if (!touch.swiping && Math.abs(dx) > 14) touch.swiping = true;
+  if (touch.swiping) setLane(touch.before + Math.sign(dx) * (1 + Math.floor((Math.abs(dx) - 14) / SWIPE_STEP)));
+}, { passive: true });
+const endTouch = e => { if (touch && e.pointerId === touch.id) touch = null; };
+addEventListener("pointerup", endTouch);
+addEventListener("pointercancel", endTouch);
 addEventListener("keydown", e => {
   if (phase !== "run") return;
-  if (e.code === "ArrowLeft" || e.code === "KeyA") lane = Math.max(0, lane - 1);
-  if (e.code === "ArrowRight" || e.code === "KeyD") lane = Math.min(2, lane + 1);
+  if (e.code === "ArrowLeft" || e.code === "KeyA") setLane(lane - 1);
+  if (e.code === "ArrowRight" || e.code === "KeyD") setLane(lane + 1);
 });
 addEventListener("contextmenu", e => e.preventDefault());
 $("mute").addEventListener("click", () => { initAudio(); setMuted(!muted); });
@@ -313,7 +334,8 @@ function hitObject(o, b) {
 
 function update(dt) {
   const runningLike = phase === "run" || phase === "clash";
-  laneX = lerp(laneX, lane, 1 - Math.exp(-14 * dt));
+  laneX = lerp(laneX, lane, 1 - Math.exp(-32 * dt));
+  if (Math.abs(laneX - lane) < 0.01) laneX = lane;
   scroll += (phase === "run" ? SCROLL : phase === "menu" ? 120 : 0) * dt;
 
   if (phase === "run") {
@@ -329,7 +351,7 @@ function update(dt) {
       if (o.done || o.dead) continue;
       if (o.type === "boss") { if (o.mega && !o.warned && o.d < 2600) { o.warned = true; floatText("The horde is coming!", "#ffd0c4", W / 2, H * 0.3, true); sfx.bad(); }
       if (o.d <= 70) { o.d = 70; phase = "clash"; clashT = 0; if (o.mega && o.n >= army) o.n = Math.max(1, army - Math.max(3, Math.round(army * 0.03))); } continue; }
-      if (o.d > 0) continue;
+      if (o.d > -RESOLVE_GRACE) continue;
       o.done = true;
       if (o.lane !== lane) continue;
       const p = proj(lane, 0);
