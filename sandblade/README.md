@@ -10,7 +10,7 @@ Open `index.html` in any browser (phone or desktop). On a phone, use "Add to Hom
 - **Let go**: get light, launch off rises and glide
 - Desktop: Space or Down arrow
 
-Land smoothly on a downslope to chain combos; three in a row starts **Fever** (extra speed, double score and shards). Cross the neon gate at the end of each **island** to reach the next one (new colours, hill shape and pattern) and push the storm back.
+Land smoothly on a downslope to chain combos; three in a row starts **Fever** (extra speed, double score and shards). Each **island** ends in a huge drop and a giant ramp that launches you across the water to the next island (new colours, hill shape and pattern), pushing the storm back. The storm gives you a 60 second head start.
 
 ## Power-ups
 - **Gale**: full speed for a few seconds and pushes the storm back
