@@ -1,16 +1,16 @@
 # Sandblade
 
-A mobile-first desert surfing game. Ride a glowing blade over endless dunes, collect light shards, backflip off crests, and outrun the sandstorm.
+A mobile-first desert surfing game. A neon, Moon Chaser-style hill rider: race a ninja on a glowing blade from island to island across a night city, before the storm eclipses the moon.
 
 ## Play
 Open `index.html` in any browser (phone or desktop). On a phone, use "Add to Home Screen" for a full-screen app feel.
 
 ## Controls
-- **Hold** anywhere: get heavy and dive down the dunes (works in the air too)
+- **Hold** anywhere: get heavy and dive down the hills (works in the air too)
 - **Let go**: get light, launch off rises and glide
 - Desktop: Space or Down arrow
 
-Land smoothly on a downslope to chain combos; three in a row starts **Fever** (extra speed, double score and shards). Reach each **oasis** to push the storm back.
+Land smoothly on a downslope to chain combos; three in a row starts **Fever** (extra speed, double score and shards). Cross the neon gate at the end of each **island** to reach the next one (new colours, hill shape and pattern) and push the storm back.
 
 ## Power-ups
 - **Gale**: full speed for a few seconds and pushes the storm back
