@@ -85,6 +85,7 @@ canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
 <div class="overlay result" id="win" hidden>
   <h2 id="winTitle">Level cleared</h2>
   <p><strong id="winCount">0</strong> riders survived</p>
+  <div class="sub" id="winSub"></div>
   <button class="cta" id="next">Next level</button>
 </div>
 
@@ -120,9 +121,10 @@ function proj(lane, d) {
 
 // ---------- game state ----------
 const RESOLVE_GRACE = 35; // world units past the army's front line before an object counts
-const START = 5, SCROLL = 300, RUSH = 150, BOLT_SPEED = 1500;
+const START = 50, CAP = 999999999, SCROLL = 300, RUSH = 150, BOLT_SPEED = 1500;
 let level = Math.max(1, +(store.get("legion-level-v2") || 1));
 let muted = store.get("legion-muted") === "1";
+let clashStart = 1, shownArmy = 0, armyPop = 0;
 let phase = "menu", army, lane, laneX, objs, bolts, parts, floats, fireT, clashT, shake, travelled, levelLen, scroll, boss, flash;
 
 function applyGate(op, v, n) {
@@ -130,76 +132,66 @@ function applyGate(op, v, n) {
   if (op === "×") return n * v;
   return Math.ceil(n / v);
 }
-function goodGate(L) { return Math.random() < 0.3 ? { op: "×", v: Math.random() < 0.15 + L * 0.02 ? 3 : 2 } : { op: "+", v: ri(3, 6 + L * 3) }; }
-function badGate(L) { return Math.random() < 0.3 ? { op: "÷", v: 2 } : { op: "+", v: -ri(3, 5 + L * 3) }; }
+function goodGate(L) {
+  const r = Math.random();
+  if (r < 0.45) return { op: "×", v: ri(2, 12) };
+  return { op: "+", v: ri(1, 10) * 100 * L };
+}
+function badGate(L) { return Math.random() < 0.5 ? { op: "÷", v: 2 } : { op: "+", v: -ri(1, 5) * 10 * L }; }
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = ri(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+const isMega = q => (q.op === "×" && q.v >= 5) || (q.op === "+" && q.v >= 500);
 
+function pushGate(lane, d, q, extra) { objs.push(Object.assign({ type: "gate", lane, d, op: q.op, v: q.v, charge: 0, mega: isMega(q) }, extra || {})); }
+function wallRow(d, wl, hp, prize, others) {
+  objs.push({ type: "wall", lane: wl, d, hp, max: hp });
+  let k = 0;
+  for (let i = 0; i < 3; i++) i === wl ? pushGate(i, d + 90, prize, { bonus: true }) : pushGate(i, d + 90, others[k++]);
+}
+function makeBoss(d, n) {
+  boss = { type: "boss", lane: 1, d, n, max: n, ph: 0 };
+  objs.push(boss); levelLen = boss.d;
+}
+
+// Level 1: scripted showcase. Best route goes 50 -> 550 -> 6,050 -> 72,600 -> 726,000 -> 8,712,000.
 function genMega() {
   objs = []; let d = 1200;
-  const row = gs => { gs.forEach((q, i) => objs.push({ type: "gate", lane: i, d, op: q[0], v: q[1], charge: 0 })); d += 560; };
-  const wallRow = (wl, hp, others) => {
-    objs.push({ type: "wall", lane: wl, d, hp, max: hp });
-    let k = 0;
-    for (let i = 0; i < 3; i++) {
-      if (i === wl) objs.push({ type: "gate", lane: i, d: d + 90, op: "+", v: 100, charge: 0, bonus: true });
-      else { const q = others[k++]; objs.push({ type: "gate", lane: i, d: d + 90, op: q[0], v: q[1], charge: 0 }); }
-    }
-    d += 640;
-  };
-  const enemy = (lanes, n) => { lanes.forEach(l => objs.push({ type: "enemy", lane: l, d, n, ph: Math.random() * TAU })); d += 560; };
-  row([["+", 10], ["×", 2], ["+", -5]]);        // 5 -> 15
-  row([["+", -10], ["×", 3], ["+", 5]]);        // 15 -> 45
-  wallRow(2, 22, [["+", 5], ["+", -10]]);       // +100 -> 145
-  enemy([1], 30);
-  row([["×", 2], ["÷", 2], ["+", 20]]);         // -> 290
-  wallRow(0, 40, [["+", -20], ["+", 10]]);      // +100 -> 390
-  enemy([0, 2], 50);
-  wallRow(1, 55, [["+", -30], ["÷", 2]]);       // last +100 before the boss -> 490
-  boss = { type: "boss", lane: 1, d: d + 600, n: 640, max: 640, ph: 0, mega: true };
-  objs.push(boss);
-  levelLen = boss.d;
+  const row = gs => { gs.forEach((q, i) => pushGate(i, d, { op: q[0], v: q[1] })); d += 560; };
+  row([["×", 5], ["+", 500], ["×", 2]]);
+  row([["×", 3], ["+", 100], ["×", 11]]);
+  wallRow(d, 2, 1500, { op: "×", v: 12 }, [{ op: "+", v: 500 }, { op: "×", v: 2 }]); d += 640;
+  [0, 2].forEach(l => objs.push({ type: "enemy", lane: l, d, n: 15000, ph: Math.random() * TAU })); d += 560;
+  row([["+", 5000], ["×", 10], ["×", 3]]);
+  wallRow(d, 1, 150000, { op: "×", v: 12 }, [{ op: "+", v: 500 }, { op: "+", v: 50000 }]); d += 640;
+  makeBoss(d + 600, 1000000);
 }
 
 function genLevel(L) {
   if (L === 1) return genMega();
   objs = []; let est = START, d = 1300;
-  const rows = 8 + L * 2;
+  const rows = 8 + L;
   for (let r = 0; r < rows; r++) {
     const roll = Math.random();
-    const type = r < 2 ? "gates" : roll < 0.45 ? "gates" : roll < 0.75 ? "enemy" : "wall";
+    const type = r < 2 ? "gates" : roll < 0.5 ? "gates" : roll < 0.72 ? "enemy" : "wall";
     if (type === "gates") {
-      const g = shuffle([goodGate(L), Math.random() < 0.5 ? goodGate(L) : badGate(L), badGate(L)]);
-      g.forEach((q, i) => objs.push({ type: "gate", lane: i, d, op: q.op, v: q.v, charge: 0 }));
-      est = Math.max(...g.map(q => applyGate(q.op, q.v, est))) * 0.85;
+      const g = shuffle([goodGate(L), goodGate(L), Math.random() < 0.3 ? badGate(L) : goodGate(L)]);
+      g.forEach((q, i) => pushGate(i, d, q));
+      est = Math.min(CAP, Math.max(...g.map(q => applyGate(q.op, q.v, est))));
     } else if (type === "enemy") {
-      const lanes = shuffle([0, 1, 2]).slice(0, L > 1 && Math.random() < 0.45 ? 2 : 1);
-      for (const ln of lanes) {
-        const n = Math.max(3, Math.round(est * rnd(0.35, 0.65)) + L);
-        objs.push({ type: "enemy", lane: ln, d: d + rnd(-60, 60), n, ph: Math.random() * TAU });
-      }
-      est = Math.max(START, est * 0.8);
+      const lanes = shuffle([0, 1, 2]).slice(0, Math.random() < 0.5 ? 2 : 1);
+      for (const ln of lanes) objs.push({ type: "enemy", lane: ln, d: d + rnd(-60, 60), n: Math.max(10, Math.round(est * rnd(0.1, 0.25))), ph: Math.random() * TAU });
     } else {
-      const wl = ri(0, 2), hp = 20 + L * 14 + Math.round(est * 0.15);
-      const bonus = 100 + (L - 1) * 50;
-      objs.push({ type: "wall", lane: wl, d, hp, max: hp });
-      const others = shuffle([goodGate(L), badGate(L)]);
-      let k = 0;
-      for (let i = 0; i < 3; i++) {
-        if (i === wl) objs.push({ type: "gate", lane: i, d: d + 90, op: "+", v: bonus, charge: 0, bonus: true });
-        else { const q = others[k++]; objs.push({ type: "gate", lane: i, d: d + 90, op: q.op, v: q.v, charge: 0 }); }
-      }
-      est = est * 0.8 + bonus * 0.45;
+      const prize = Math.random() < 0.6 ? { op: "×", v: ri(8, 12) } : { op: "+", v: 500 * L * ri(1, 4) };
+      wallRow(d, ri(0, 2), Math.max(30, Math.round(est * 0.3)), prize, [goodGate(L), Math.random() < 0.5 ? badGate(L) : goodGate(L)]);
+      est = Math.min(CAP, applyGate(prize.op, prize.v, est));
+      d += 90;
     }
     d += 560;
   }
-  boss = { type: "boss", lane: 1, d: d + 500, n: Math.max(12, Math.round(est * (0.75 + L * 0.03)) + L * 4), max: 0, ph: 0 };
-  boss.max = boss.n;
-  objs.push(boss);
-  levelLen = boss.d;
+  makeBoss(d + 500, Math.max(50, Math.round(est * 0.25)));
 }
 
 function reset() {
-  layout(); army = START; lane = 1; laneX = 1; bolts = []; parts = []; floats = []; fireT = 0; clashT = 0; shake = 0; travelled = 0; scroll = 0; flash = 0;
+  layout(); army = START; shownArmy = START; armyPop = 0; lane = 1; laneX = 1; bolts = []; parts = []; floats = []; fireT = 0; clashT = 0; shake = 0; travelled = 0; scroll = 0; flash = 0;
   genLevel(level);
 }
 
@@ -281,8 +273,9 @@ function endLevel(won) {
   phase = won ? "win" : "lose";
   $("hud").hidden = true;
   if (won) {
-    $("winTitle").textContent = level === 1 ? (army <= 30 ? "Won by a hair" : "Mega level cleared") : `Level ${level} cleared`;
+    $("winTitle").textContent = ["Total domination", "Flawless victory", "Crushed them", "Unstoppable"][(level - 1) % 4];
     $("winCount").textContent = army.toLocaleString();
+    $("winSub").textContent = `Level ${level} · horde of ${boss.max.toLocaleString()} wiped out`;
     $("win").hidden = false; sfx.win();
   } else {
     $("loseText").textContent = boss && boss.d < 200 ? `The horde still had ${boss.n} riders.` : "Watch for red gates and enemy squads.";
@@ -295,7 +288,7 @@ function endLevel(won) {
 function burst(x, y, n, color, spd = 160, size = 3) {
   for (let i = 0; i < n; i++) { const a = Math.random() * TAU, s = spd * (0.3 + Math.random()); parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - spd * 0.4, life: 0.7, max: 0.7, size: size * (0.6 + Math.random()), color }); }
 }
-function floatText(text, color, x, y, big) { floats.push({ text, color, x, y, t: 0, big }); }
+function floatText(text, color, x, y, big, size) { floats.push({ text, color, x, y, t: 0, big, size: size || 1 }); }
 function loseArmy(n) {
   army = Math.max(0, army - n);
   shake = 0.35;
@@ -303,6 +296,7 @@ function loseArmy(n) {
 }
 
 // ---------- update ----------
+const boltDmg = () => Math.max(1, Math.floor(army / 120));
 function fireRate() { return Math.min(3 + army * 0.14, 22); }
 
 function targetFor(b) {
@@ -321,13 +315,13 @@ function hitObject(o, b) {
   const p = proj(o.type === "boss" ? b.lane : o.lane, o.d);
   if (o.type === "gate") {
     o.charge++;
-    if (o.charge >= 2) { o.charge = 0; o.v += 1; o.pulse = 0.15; }
+    if (o.op === "+" && o.charge >= 2) { o.charge = 0; o.v += Math.max(1, Math.round(Math.abs(o.v) * 0.04)); o.pulse = 0.15; }
   } else if (o.type === "wall") {
-    o.hp--; o.pulse = 0.08;
+    o.hp = Math.max(0, o.hp - boltDmg()); o.pulse = 0.08;
     if (o.hp <= 0) { o.dead = true; sfx.brk(); burst(p.x, p.y - 30 * p.s, 30, "rgba(220,170,110,", 260, 6); shake = 0.25; }
     else if (Math.random() < 0.3) sfx.hit();
   } else if (o.type === "enemy" || o.type === "boss") {
-    o.n--; burst(p.x + rnd(-20, 20) * p.s, p.y - 14 * p.s, 3, "rgba(200,70,45,", 90, 3);
+    o.n = Math.max(0, o.n - boltDmg()); burst(p.x + rnd(-20, 20) * p.s, p.y - 14 * p.s, 3, "rgba(200,70,45,", 90, 3);
     if (o.n <= 0) { o.dead = true; if (o.type === "boss") { endLevel(true); } }
   }
 }
@@ -340,7 +334,7 @@ function update(dt) {
 
   if (phase === "run") {
     travelled += SCROLL * dt;
-    for (const o of objs) o.d -= (SCROLL + (o.type === "enemy" || o.type === "boss" ? RUSH : 0)) * dt;
+    for (const o of objs) o.d -= (SCROLL + (o.type === "enemy" || (o.type === "boss" && o.d < 900) ? RUSH : 0)) * dt;
 
     // firing
     fireT -= dt;
@@ -349,28 +343,30 @@ function update(dt) {
     // resolve objects reaching the legion
     for (const o of objs) {
       if (o.done || o.dead) continue;
-      if (o.type === "boss") { if (o.mega && !o.warned && o.d < 2600) { o.warned = true; floatText("The horde is coming!", "#ffd0c4", W / 2, H * 0.3, true); sfx.bad(); }
-      if (o.d <= 70) { o.d = 70; phase = "clash"; clashT = 0; if (o.mega && o.n >= army) o.n = Math.max(1, army - Math.max(3, Math.round(army * 0.03))); } continue; }
+      if (o.type === "boss") { if (!o.warned && o.d < 2600) { o.warned = true; floatText(`HORDE OF ${o.n.toLocaleString()} INCOMING`, "#ffd0c4", W / 2, H * 0.3, true); sfx.bad(); shake = 0.3; }
+      if (o.d <= 70) { o.d = 70; phase = "clash"; clashT = 0; o.n = Math.min(o.n, Math.max(1, Math.round(army * 0.2))); clashStart = o.n; } continue; }
       if (o.d > -RESOLVE_GRACE) continue;
       o.done = true;
       if (o.lane !== lane) continue;
       const p = proj(lane, 0);
       if (o.type === "gate") {
         const before = army;
-        army = clamp(applyGate(o.op, o.v, army), 0, 9999);
+        army = clamp(applyGate(o.op, o.v, army), 0, CAP);
         const diff = army - before;
-        floatText((diff >= 0 ? "+" : "−") + Math.abs(diff), diff >= 0 ? "#dff7ff" : "#ffd0c4", p.x, p.y - 60, o.bonus);
-        if (diff >= 0) { o.bonus ? sfx.bonus() : sfx.good(); flash = o.bonus ? 0.4 : 0.15; burst(p.x, p.y - 20, o.bonus ? 40 : 14, "rgba(190,240,255,", 200, 4); }
+        const big = o.mega || o.bonus;
+        floatText((diff >= 0 ? "+" : "−") + Math.abs(diff).toLocaleString(), diff >= 0 ? "#dff7ff" : "#ffd0c4", p.x, p.y - 60, false);
+        if (big && diff > 0) floatText(gateLabel(o) + "!", "#ffe39a", W / 2, H * 0.3, true, 1.6);
+        if (diff >= 0) { big ? sfx.bonus() : sfx.good(); flash = big ? 0.55 : 0.15; shake = big ? 0.3 : 0; armyPop = big ? 1 : 0.4; burst(p.x, p.y - 20, big ? 70 : 14, big ? "rgba(255,226,140," : "rgba(190,240,255,", big ? 320 : 200, big ? 6 : 4); }
         else { sfx.bad(); shake = 0.2; }
         if (army <= 0) endLevel(false);
       } else if (o.type === "wall") {
-        floatText("−" + Math.min(o.hp, army), "#ffd0c4", p.x, p.y - 60);
+        floatText("−" + Math.min(o.hp, Math.floor(army * 0.3)).toLocaleString(), "#ffd0c4", p.x, p.y - 60);
         sfx.brk(); burst(p.x, p.y - 30, 30, "rgba(220,170,110,", 260, 6);
-        loseArmy(o.hp); o.dead = true;
+        loseArmy(Math.min(o.hp, Math.floor(army * 0.3))); o.dead = true;
       } else if (o.type === "enemy") {
-        floatText("−" + Math.min(o.n, army), "#ffd0c4", p.x, p.y - 60);
+        floatText("−" + Math.min(o.n, Math.floor(army * 0.3)).toLocaleString(), "#ffd0c4", p.x, p.y - 60);
         burst(p.x, p.y - 15, 26, "rgba(200,70,45,", 220, 4); sfx.bad();
-        loseArmy(o.n); o.dead = true;
+        loseArmy(Math.min(o.n, Math.floor(army * 0.3))); o.dead = true;
       }
     }
     objs = objs.filter(o => o.d > -260 && !(o.dead && o.type !== "boss"));
@@ -379,8 +375,8 @@ function update(dt) {
   if (phase === "clash") {
     clashT -= dt;
     while (clashT <= 0 && phase === "clash") {
-      clashT += Math.min(army, boss.n) < 25 ? 0.11 : 0.045;
-      const k = Math.max(1, Math.floor(Math.min(army, boss.n) / 14));
+      clashT += 0.045;
+      const k = Math.max(1, Math.ceil(clashStart / 40));
       army = Math.max(0, army - k); boss.n = Math.max(0, boss.n - k);
       const p = proj(laneX, 35);
       burst(p.x + rnd(-40, 40) * p.s, p.y - 15 * p.s, 4, Math.random() < 0.5 ? "rgba(200,70,45," : "rgba(80,170,160,", 180, 3);
@@ -404,7 +400,8 @@ function update(dt) {
   for (const f of floats) f.t += dt;
   floats = floats.filter(f => f.t < (f.big ? 1.8 : 1.1));
   for (const o of objs) if (o.pulse) o.pulse = Math.max(0, o.pulse - dt);
-  shake = Math.max(0, shake - dt); flash = Math.max(0, flash - dt);
+  shake = Math.max(0, shake - dt); flash = Math.max(0, flash - dt); armyPop = Math.max(0, armyPop - dt * 1.6);
+  shownArmy = Math.abs(army - shownArmy) < 1 ? army : lerp(shownArmy, army, 1 - Math.exp(-7 * dt));
 
   if (phase === "run" || phase === "clash") $("progBar").style.width = clamp(travelled / Math.max(1, levelLen - 70), 0, 1) * 100 + "%";
 }
@@ -542,13 +539,14 @@ function gateGood(o) { return o.op === "×" || (o.op === "+" && o.v >= 0); }
 function drawGate(o) {
   const p = proj(o.lane, o.d), w = laneW * 0.92 * p.s, h = laneW * 0.95 * p.s, x = p.x - w / 2, y = p.y - h;
   const good = gateGood(o), pulse = o.pulse ? 1 + o.pulse * 1.5 : 1;
-  const base = o.bonus ? [255, 200, 90] : good ? [90, 190, 235] : [225, 85, 70];
+  const base = o.bonus || o.mega ? [255, 200, 90] : good ? [90, 190, 235] : [225, 85, 70];
+  if ((o.bonus || o.mega) && !o.done) { ctx.save(); ctx.shadowColor = "rgba(255,215,120,.9)"; ctx.shadowBlur = 24 * p.s; ctx.fillStyle = "rgba(255,215,120,.25)"; ctx.fillRect(x, y, w, h); ctx.restore(); }
   ctx.fillStyle = `rgba(${base[0]},${base[1]},${base[2]},.45)`;
   ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = `rgba(${base[0]},${base[1]},${base[2]},.95)`; ctx.lineWidth = Math.max(1.5, 4 * p.s); ctx.strokeRect(x, y, w, h);
   ctx.fillStyle = "#c48f5d"; const pw = Math.max(2, 9 * p.s);
   ctx.fillRect(x - pw, y - pw, pw, h + pw); ctx.fillRect(x + w, y - pw, pw, h + pw); ctx.fillRect(x - pw, y - pw, w + pw * 2, pw);
-  ctx.font = `700 ${Math.max(10, (o.bonus ? 44 : 40) * p.s * pulse)}px Jost, system-ui, sans-serif`;
+  ctx.font = `700 ${Math.max(10, (o.bonus || o.mega ? 48 : 40) * p.s * pulse * (String(gateLabel(o)).length > 5 ? 0.7 : 1))}px Jost, system-ui, sans-serif`;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillStyle = "rgba(60,30,10,.35)"; ctx.fillText(gateLabel(o), p.x + 2 * p.s, y + h * 0.5 + 2 * p.s);
   ctx.fillStyle = "#fff"; ctx.fillText(gateLabel(o), p.x, y + h * 0.5);
@@ -567,9 +565,9 @@ function drawWall(o) {
   // cracks as it weakens
   const dmg = 1 - o.hp / o.max;
   if (dmg > 0.3) { ctx.strokeStyle = "rgba(70,40,20,.6)"; ctx.lineWidth = Math.max(1, 2 * p.s); ctx.beginPath(); ctx.moveTo(x + w * 0.3, y); ctx.lineTo(x + w * 0.4, y + h * 0.4); ctx.lineTo(x + w * 0.32, y + h * 0.7); if (dmg > 0.65) { ctx.moveTo(x + w * 0.7, y + h); ctx.lineTo(x + w * 0.62, y + h * 0.5); ctx.lineTo(x + w * 0.75, y + h * 0.2); } ctx.stroke(); }
-  ctx.font = `700 ${Math.max(10, 34 * p.s)}px Jost, system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(60,30,10,.55)"; ctx.fillText(o.hp, p.x + jig + 1, y + h / 2 + 2);
-  ctx.fillStyle = "#fff6e6"; ctx.fillText(o.hp, p.x + jig, y + h / 2);
+  ctx.font = `700 ${Math.max(10, (o.hp >= 10000 ? 24 : 34) * p.s)}px Jost, system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(60,30,10,.55)"; ctx.fillText(o.hp.toLocaleString(), p.x + jig + 1, y + h / 2 + 2);
+  ctx.fillStyle = "#fff6e6"; ctx.fillText(o.hp.toLocaleString(), p.x + jig, y + h / 2);
 }
 
 function drawObjects(t) {
@@ -581,11 +579,11 @@ function drawObjects(t) {
     else if (o.type === "enemy") {
       const p = proj(o.lane, o.d);
       drawCrowd(p.x, p.y, p.s, o.n, 1, t + o.ph, 40, 8, laneW * 0.45 * p.s);
-      badge(p.x, p.y - (34 + Math.min(Math.sqrt(o.n) * 3, 18)) * p.s, String(o.n), 1, p.s);
+      badge(p.x, p.y - (34 + Math.min(Math.sqrt(o.n) * 3, 18)) * p.s, o.n.toLocaleString(), 1, p.s);
     } else if (o.type === "boss" && o.n > 0) {
       const p = proj(1, o.d);
       drawCrowd(p.x, p.y, p.s, o.n, 1, t, 110, 10, laneW * 1.45 * p.s);
-      badge(p.x, p.y - 70 * p.s, `Storm horde ${o.n}`, 1, p.s);
+      badge(p.x, p.y - 70 * p.s, `Horde ${o.n.toLocaleString()}`, 1, p.s);
     }
   }
 }
@@ -602,8 +600,11 @@ function drawArmy(t) {
   if (phase === "menu") return;
   const p = proj(laneX, 0);
   if (army > 0) {
-    drawCrowd(p.x, p.y, p.s, army, 0, t, 70, 7.5, phase === "clash" ? laneW * 1.4 : laneW * 0.55);
-    badge(p.x, p.y + 44, String(army), 0, 1);
+    const shown = Math.min(army, Math.round(40 + 22 * Math.log10(Math.max(1, army))));
+    const sc = 1 + armyPop * 0.25;
+    const cap = (phase === "clash" ? laneW * 1.4 : laneW * (0.55 + Math.min(0.35, Math.log10(Math.max(1, army)) * 0.05))) * sc;
+    drawCrowd(p.x, p.y, p.s * sc, shown, 0, t, 200, 7.5, cap);
+    badge(p.x, p.y + 44, Math.round(shownArmy).toLocaleString(), 0, 1 + armyPop * 0.5);
   }
 }
 
@@ -618,9 +619,12 @@ function drawFx() {
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   for (const f of floats) {
     const a = clamp(1 - (f.t - (f.big ? 1.3 : 0.6)) / 0.5, 0, 1), y = f.y - f.t * (f.big ? 30 : 70);
-    ctx.font = `700 ${f.big ? 44 : 30}px Jost, system-ui, sans-serif`;
+    const pop = f.size > 1 ? 1 + Math.max(0, 0.35 - f.t) * 2 : 1;
+    ctx.font = `700 ${Math.min((f.big ? 44 : 30) * f.size * pop, W * 0.16)}px Jost, system-ui, sans-serif`;
     ctx.fillStyle = `rgba(60,30,10,${a * 0.4})`; ctx.fillText(f.text, f.x + 2, y + 3);
-    ctx.globalAlpha = a; ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, y); ctx.globalAlpha = 1;
+    ctx.globalAlpha = a;
+    if (f.big) { ctx.lineJoin = "round"; ctx.lineWidth = 6; ctx.strokeStyle = "rgba(110,60,25,.85)"; ctx.strokeText(f.text, f.x, y); }
+    ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, y); ctx.globalAlpha = 1;
   }
   if (flash > 0) { ctx.fillStyle = `rgba(255,240,200,${flash * 0.6})`; ctx.fillRect(0, 0, W, H); }
 }
