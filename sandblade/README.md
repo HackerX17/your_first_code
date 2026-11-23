@@ -6,11 +6,16 @@ A mobile-first desert surfing game. Ride a glowing blade over endless dunes, col
 Open `index.html` in any browser (phone or desktop). On a phone, use "Add to Home Screen" for a full-screen app feel.
 
 ## Controls
-- **Hold** on the ground: dive down slopes to gain speed
-- **Release** at a crest: launch into the air
-- **Hold in the air**: backflip. Land with the blade flat to the slope for a speed boost
+- **Hold** anywhere: get heavy and dive down the dunes (works in the air too)
+- **Let go**: get light, launch off rises and glide
 - Desktop: Space or Down arrow
 
-Chained clean landings multiply trick points (up to ×5). A crooked landing is a wipeout and costs most of your speed. If the storm catches you, the run ends.
+Land smoothly on a downslope to chain combos; three in a row starts **Fever** (extra speed, double score and shards). Reach each **oasis** to push the storm back.
+
+## Power-ups
+- **Gale**: full speed for a few seconds and pushes the storm back
+- **Skyward**: launches you sky high and lets you glide
+- **Magnet**: pulls nearby shards to you
+- **Ward**: saves you from the storm once
 
 Single file, no dependencies: HTML5 canvas and Web Audio.
