@@ -601,8 +601,8 @@ function scenePal() {
   const cx = cam.x + W / (baseScale() * cam.zoom) * 0.5, k = islandAt(cx);
   const A = isl(k);
   if (k < BOUNDS.length && BOUNDS[k] - cx < 1500) {
-    const t = smooth(1 - (BOUNDS[k] - cx) / 1500), B = isl(k + 1);
-    return { sky: A.sky.map((c, i) => mixHex(c, B.sky[i], t)), city: A.city.map((c, i) => mixHex(c, B.city[i], t)), glow: t < 0.5 ? A.sky[2] : B.sky[2] };
+    const t = Math.round(smooth(1 - (BOUNDS[k] - cx) / 1500) * 6) / 6, B = isl(k + 1);
+    return { sky: A.sky.map((c, i) => mixHex(c, B.sky[i], t)), city: t < 0.5 ? A.city : B.city, glow: t < 0.5 ? A.sky[2] : B.sky[2] };
   }
   return { sky: A.sky, city: A.city, glow: A.sky[2] };
 }
@@ -639,40 +639,59 @@ function drawSky(t, pal) {
   ctx.stroke();
 }
 
-function layerBase(f) { return lerp(H * 0.56, (-cam.y) * baseScale() * cam.zoom, f); }
+// The city ignores camera zoom (zooming used to re-lay out every building each frame),
+// and each building is drawn once into a cached sprite, then reused.
+function layerBase(f) { return lerp(H * 0.56, (-cam.y) * baseScale(), f); }
 
 const WIN = ["#00f0ff", "#ff2bd6", "#7dff3a", "#ffe14d", "#8a7bff"];
+const cityCache = new Map();
+function buildingSprite(i, idOff, color, u, windows, w, h) {
+  const key = `${seed}|${idOff}|${i}|${color}|${u.toFixed(3)}|${DPR}`;
+  let c = cityCache.get(key);
+  if (c) return c;
+  const r = hash(i * 1.7 + idOff), r2 = hash(i * 3.1 + idOff), r3 = hash(i * 5.9 + idOff);
+  const padTop = 60 * u, extra = 30 * u;
+  c = document.createElement("canvas");
+  c.width = Math.max(1, Math.ceil(w * DPR)); c.height = Math.max(1, Math.ceil((h + padTop + extra) * DPR));
+  const g = c.getContext("2d"); g.scale(DPR, DPR);
+  const top = padTop;
+  g.fillStyle = color; g.fillRect(0, top, w, h + extra);
+  if (r3 > 0.6) { g.fillRect(w * 0.2, top - 18 * u, w * 0.6, 18 * u); g.fillRect(w * 0.45, top - 50 * u, 3 * u, 34 * u); }
+  g.fillStyle = WIN[((i + idOff) % WIN.length + WIN.length) % WIN.length]; g.globalAlpha = windows ? 0.9 : 0.5; g.fillRect(0, top, w, Math.max(1.5, 2.5 * u)); g.globalAlpha = 1;
+  if (windows) {
+    const ww = 5 * u, wh = 7 * u, gx = 11 * u, gy = 14 * u, col = WIN[Math.floor(r2 * WIN.length)];
+    let ry = 0;
+    for (let yy = top + 10 * u; yy < top + h + extra; yy += gy, ry++) {
+      let rx = 0;
+      for (let xx = 6 * u; xx < w - ww - 3 * u; xx += gx, rx++) {
+        const hv = hash(i * 31.7 + rx * 7.3 + ry * 13.1 + idOff);
+        if (hv > 0.5) { g.fillStyle = hv > 0.86 ? col : "rgba(255,240,200,.75)"; g.fillRect(xx, yy, ww, wh); }
+      }
+    }
+    if (r > 0.72) {
+      const sx = w * 0.15, sy = top + h * 0.3, swd = w * 0.7, sh = 16 * u, cc = WIN[Math.floor(r3 * WIN.length)];
+      g.shadowColor = cc; g.shadowBlur = 10; g.strokeStyle = cc; g.lineWidth = 2.5 * u; g.strokeRect(sx, sy, swd, sh);
+      g.fillStyle = cc; g.fillRect(sx + 4 * u, sy + sh / 2 - 1.5 * u, swd * (0.4 + r2 * 0.4), 3 * u); g.shadowBlur = 0;
+    }
+  }
+  if (cityCache.size > 260) { let n = 0; for (const k of cityCache.keys()) { cityCache.delete(k); if (++n >= 120) break; } }
+  cityCache.set(key, c);
+  return c;
+}
+
 function drawCity(f, color, segW, idOff, windows, t) {
-  const u = baseScale() * (0.7 + cam.zoom * 0.3);
-  const scroll = cam.x * baseScale() * cam.zoom * f;
+  const u = baseScale();
+  const scroll = cam.x * u * f;
   const sw = segW * u, base = layerBase(f);
   const i0 = Math.floor(scroll / sw) - 1, i1 = i0 + Math.ceil(W / sw) + 2;
   for (let i = i0; i <= i1; i++) {
     const r = hash(i * 1.7 + idOff), r2 = hash(i * 3.1 + idOff), r3 = hash(i * 5.9 + idOff);
-    const x = i * sw - scroll, w = sw * (0.72 + r2 * 0.26), h = (windows ? 140 : 220) * u * (0.6 + r * 1.3);
-    const top = base - h;
-    ctx.fillStyle = color; ctx.fillRect(x, top, w, h + H);
-    // stepped crown / spire
-    if (r3 > 0.6) { ctx.fillRect(x + w * 0.2, top - 18 * u, w * 0.6, 18 * u); ctx.fillRect(x + w * 0.45, top - 50 * u, 3 * u, 34 * u); }
+    const x = Math.round(i * sw - scroll), w = Math.round(sw * (0.72 + r2 * 0.26)), h = Math.round((windows ? 140 : 220) * u * (0.6 + r * 1.3));
+    const top = base - h, padTop = 60 * u, extra = 30 * u;
+    const spr = buildingSprite(i, idOff, color, u, windows, w, h);
+    ctx.drawImage(spr, x, top - padTop, w, h + padTop + extra);
+    ctx.fillStyle = color; ctx.fillRect(x, top + h + extra - 1, w, H);
     if (r3 > 0.6 && Math.sin(t * 3 + i) > 0) { ctx.fillStyle = "#ff2b6a"; ctx.fillRect(x + w * 0.45 - 1.5 * u, top - 54 * u, 6 * u, 5 * u); }
-    // neon edge on the roof
-    ctx.fillStyle = WIN[(i + idOff) % WIN.length]; ctx.globalAlpha = windows ? 0.9 : 0.5; ctx.fillRect(x, top, w, Math.max(1.5, 2.5 * u)); ctx.globalAlpha = 1;
-    if (windows) {
-      const ww = 5 * u, wh = 7 * u, gx = 11 * u, gy = 14 * u, col = WIN[Math.floor(r2 * WIN.length)];
-      let ry = 0;
-      for (let yy = top + 10 * u; yy < base + 30 * u; yy += gy, ry++) {
-        let rx = 0;
-        for (let xx = x + 6 * u; xx < x + w - ww - 3 * u; xx += gx, rx++) {
-          const hv = hash(i * 31.7 + rx * 7.3 + ry * 13.1 + idOff);
-          if (hv > 0.5) { ctx.fillStyle = hv > 0.86 ? col : "rgba(255,240,200,.75)"; ctx.fillRect(xx, yy, ww, wh); }
-        }
-      }
-      if (r > 0.72) { // neon sign
-        const sx = x + w * 0.15, sy = top + h * 0.3, swd = w * 0.7, sh = 16 * u, c = WIN[Math.floor(r3 * WIN.length)];
-        ctx.save(); ctx.shadowColor = c; ctx.shadowBlur = 14; ctx.strokeStyle = c; ctx.lineWidth = 2.5 * u; ctx.strokeRect(sx, sy, swd, sh);
-        ctx.fillStyle = c; ctx.fillRect(sx + 4 * u, sy + sh / 2 - 1.5 * u, swd * (0.4 + r2 * 0.4), 3 * u); ctx.restore();
-      }
-    }
   }
 }
 
@@ -693,12 +712,14 @@ function drawPattern(I, pts, minY, sc) {
   if (I.pat === "bands") {
     for (let k = 1; k <= 6; k++) { crest(k * 34 * sc); ctx.strokeStyle = c + (k % 2 ? ".28)" : ".14)"); ctx.lineWidth = 14 * sc; ctx.stroke(); }
   } else if (I.pat === "dots") {
-    const sp = 34, ox = cam.x % sp;
-    ctx.fillStyle = c + ".3)";
+    const sp = 34 * Math.max(1, Math.ceil(16 / (34 * sc))), ox = cam.x % sp, rr = Math.max(1.5, 5 * sc * sp / 34);
+    ctx.fillStyle = c + ".3)"; ctx.beginPath();
     for (let wy = Math.floor((cam.y + minY / sc) / sp) * sp; (wy - cam.y) * sc < H; wy += sp)
-      for (let wx = cam.x - ox; (wx - cam.x) * sc < W + 10; wx += sp) {
-        const odd = Math.round(wy / sp) % 2 ? sp / 2 : 0; ctx.beginPath(); ctx.arc((wx + odd - cam.x) * sc, (wy - cam.y) * sc, 5 * sc + 1, 0, TAU); ctx.fill();
+      for (let wx = cam.x - ox - sp; (wx - cam.x) * sc < W + 10; wx += sp) {
+        const odd = Math.round(wy / sp) % 2 ? sp / 2 : 0, X = (wx + odd - cam.x) * sc, Y = (wy - cam.y) * sc;
+        ctx.moveTo(X + rr, Y); ctx.arc(X, Y, rr, 0, TAU);
       }
+    ctx.fill();
   } else if (I.pat === "stripes") {
     ctx.strokeStyle = c + ".34)"; ctx.lineWidth = 14 * sc;
     const sp = 60 * sc, off = (cam.x * sc) % sp; ctx.beginPath();
