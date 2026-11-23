@@ -1,0 +1,262 @@
+<title>Chopper Cave</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+<style>
+/* Layout: one letterboxed play field (560 x 360 world units) centred on black; everything is drawn on the canvas. Single retro look in every theme. */
+:root {
+  --bg: #000000;
+  --green: #5de03a;
+  --text: #f2f2f2;
+  --retro: "Press Start 2P", "Courier New", monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--retro);
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  touch-action: none; overscroll-behavior: none;
+}
+canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+.mute {
+  position: fixed; z-index: 5; right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  width: 40px; height: 40px; border: 2px solid var(--green); background: #000; color: var(--green); font: 12px var(--retro); cursor: pointer;
+}
+.mute:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+</style>
+
+<canvas id="c" aria-label="Chopper Cave game. Hold to fly up, let go to drop."></canvas>
+<button class="mute" id="mute" aria-label="Toggle sound">♪</button>
+
+<script>
+(() => {
+"use strict";
+const cvs = document.getElementById("c"), ctx = cvs.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function resize() { DPR = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cvs.width = Math.round(W * DPR); cvs.height = Math.round(H * DPR); }
+addEventListener("resize", resize); resize();
+
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+// ---------- world ----------
+const VW = 560, VH = 360, COL = 16, HELI_X = 120;
+const GREEN = "#5de03a", GREEN_D = "#46b82a";
+let state = "title", hold = false;
+let heli, cols, blocks, smoke, sparks, scroll, dist, speed, smokeT, deadT, flash;
+let best = +(store.get("chopper-best") || 0), muted = store.get("chopper-muted") === "1";
+let gapC, gapH, nextBlock;
+
+function newCol() {
+  // the cave narrows and wanders more the further you get
+  const tight = clamp(dist / 9000, 0, 1);
+  const targetH = 290 - tight * 130;
+  gapH += (targetH - gapH) * 0.05;
+  gapC += rnd(-1, 1) * (10 + tight * 12);
+  gapC = clamp(gapC, gapH / 2 + 12, VH - gapH / 2 - 12);
+  return { top: Math.round((gapC - gapH / 2) / 6) * 6, bot: Math.round((gapC + gapH / 2) / 6) * 6 };
+}
+function reset() {
+  heli = { y: VH / 2, vy: 0, tilt: 0 };
+  cols = []; blocks = []; smoke = []; sparks = [];
+  scroll = 0; dist = 0; speed = 210; smokeT = 0; deadT = 0; flash = 0;
+  gapC = VH / 2; gapH = 290; nextBlock = 520;
+  for (let i = 0; i <= VW / COL + 2; i++) cols.push({ top: 36, bot: VH - 36 });
+}
+reset();
+
+// ---------- audio ----------
+let actx = null, master, rotorGain, rotorOsc;
+function initAudio() {
+  if (actx) { if (actx.state === "suspended") actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain(); master.gain.value = muted ? 0 : 0.5; master.connect(actx.destination);
+    // rotor: a low buzz chopped by a fast LFO
+    rotorOsc = actx.createOscillator(); rotorOsc.type = "sawtooth"; rotorOsc.frequency.value = 70;
+    const lfo = actx.createOscillator(), lfoGain = actx.createGain(); lfo.frequency.value = 18; lfoGain.gain.value = 0.5;
+    const chop = actx.createGain(); chop.gain.value = 0.5;
+    const filt = actx.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 500;
+    rotorGain = actx.createGain(); rotorGain.gain.value = 0;
+    lfo.connect(lfoGain); lfoGain.connect(chop.gain);
+    rotorOsc.connect(chop); chop.connect(filt); filt.connect(rotorGain); rotorGain.connect(master);
+    rotorOsc.start(); lfo.start();
+  } catch (e) { actx = null; }
+}
+function crashSound() {
+  if (!actx || muted) return;
+  const len = actx.sampleRate * 0.8, buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  const src = actx.createBufferSource(), g = actx.createGain(), f = actx.createBiquadFilter();
+  f.type = "lowpass"; f.frequency.value = 900; g.gain.value = 0.7;
+  src.buffer = buf; src.connect(f); f.connect(g); g.connect(master); src.start();
+}
+function setMuted(m) {
+  muted = m; store.set("chopper-muted", m ? "1" : "0");
+  const b = document.getElementById("mute"); b.textContent = m ? "✕" : "♪"; b.setAttribute("aria-pressed", String(m));
+  if (master) master.gain.value = m ? 0 : 0.5;
+}
+setMuted(muted);
+
+// ---------- input: hold anywhere ----------
+function press(e) {
+  if (e && e.target && e.target.closest && e.target.closest("button")) return;
+  initAudio(); hold = true;
+  if (state === "title" || (state === "dead" && deadT > 0.7)) { reset(); state = "play"; }
+}
+function release() { hold = false; }
+addEventListener("pointerdown", press, { passive: true });
+addEventListener("pointerup", release); addEventListener("pointercancel", release); addEventListener("blur", release);
+addEventListener("keydown", e => { if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); if (!e.repeat) press(); } });
+addEventListener("keyup", e => { if (e.code === "Space" || e.code === "ArrowUp") release(); });
+addEventListener("contextmenu", e => e.preventDefault());
+document.getElementById("mute").addEventListener("click", () => { initAudio(); setMuted(!muted); });
+
+// ---------- update ----------
+function heliHits() {
+  // a few points around the helicopter body and tail
+  const pts = [[-26, 0], [-14, -6], [14, -9], [22, 0], [14, 9], [-4, 9], [-14, 6]];
+  for (const [ox, oy] of pts) {
+    const x = HELI_X + ox, y = heli.y + oy;
+    const c = cols[Math.floor((x + scroll % COL) / COL)];
+    if (c && (y < c.top || y > c.bot)) return true;
+    for (const b of blocks) if (x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h) return true;
+  }
+  return heli.y < 0 || heli.y > VH;
+}
+function crash() {
+  state = "dead"; deadT = 0; flash = 1; crashSound();
+  try { navigator.vibrate && navigator.vibrate(120); } catch (e) {}
+  for (let i = 0; i < 40; i++) { const a = Math.random() * Math.PI * 2, s = rnd(40, 260); sparks.push({ x: HELI_X, y: heli.y, vx: Math.cos(a) * s - 60, vy: Math.sin(a) * s, life: rnd(0.5, 1.1) }); }
+  const d = Math.floor(dist / 10);
+  if (d > best) { best = d; store.set("chopper-best", String(best)); }
+}
+function update(dt) {
+  if (state === "play") {
+    // hold to climb, let go to drop
+    heli.vy += (hold ? -1050 : 900) * dt;
+    heli.vy = clamp(heli.vy, -330, 380);
+    heli.y += heli.vy * dt;
+    heli.tilt += (clamp(heli.vy / 900, -0.25, 0.3) - heli.tilt) * Math.min(1, dt * 8);
+    speed = Math.min(210 + dist * 0.012, 400);
+    const dx = speed * dt; scroll += dx; dist += dx;
+    while (scroll >= COL) { scroll -= COL; cols.shift(); cols.push(newCol()); }
+    for (const b of blocks) b.x -= dx;
+    blocks = blocks.filter(b => b.x + b.w > -10);
+    nextBlock -= dx;
+    if (nextBlock <= 0) {                                      // a pillar somewhere inside the gap
+      const c = cols[cols.length - 1], h = rnd(60, 95);
+      blocks.push({ x: VW + 10, y: Math.round(rnd(c.top + 10, c.bot - h - 10)), w: 28, h: Math.round(h) });
+      nextBlock = rnd(300, 460) - clamp(dist / 9000, 0, 1) * 80;
+    }
+    smokeT -= dt;
+    if (smokeT <= 0) { smokeT = 0.07; smoke.push({ x: HELI_X - 30, y: heli.y + 2 + rnd(-1, 1), r: 3.2, life: 1 }); }
+    if (heliHits()) crash();
+  } else if (state === "dead") {
+    deadT += dt;
+  } else {
+    heli.y = VH / 2 + Math.sin(performance.now() / 400) * 14;     // hover on the title screen
+  }
+  for (const s of smoke) { s.x -= (state === "play" ? speed : 0) * dt + 10 * dt; s.life -= dt * 0.55; }
+  smoke = smoke.filter(s => s.life > 0 && s.x > -10);
+  for (const s of sparks) { s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 500 * dt; s.life -= dt; }
+  sparks = sparks.filter(s => s.life > 0);
+  flash = Math.max(0, flash - dt * 3);
+  if (rotorGain) rotorGain.gain.setTargetAtTime(state === "play" && !muted ? (hold ? 0.22 : 0.14) : 0, actx.currentTime, 0.05);
+  if (rotorOsc) rotorOsc.frequency.setTargetAtTime(hold ? 82 : 68, actx.currentTime, 0.1);
+}
+
+// ---------- drawing ----------
+let S = 1, OX = 0, OY = 0;
+function drawWalls() {
+  ctx.fillStyle = GREEN;
+  for (let i = 0; i < cols.length; i++) {
+    const x = i * COL - scroll, c = cols[i];
+    ctx.fillRect(x, 0, COL + 0.5, c.top);
+    ctx.fillRect(x, c.bot, COL + 0.5, VH - c.bot);
+  }
+  // faint scan lines across the green, like the old screens
+  ctx.fillStyle = GREEN_D;
+  for (let i = 0; i < cols.length; i++) {
+    const x = i * COL - scroll, c = cols[i];
+    for (let y = 6; y < c.top; y += 6) ctx.fillRect(x, y, COL + 0.5, 1);
+    for (let y = c.bot + 6; y < VH; y += 6) ctx.fillRect(x, y, COL + 0.5, 1);
+  }
+  for (const b of blocks) {
+    ctx.fillStyle = GREEN; ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = GREEN_D; for (let y = b.y + 6; y < b.y + b.h; y += 6) ctx.fillRect(b.x, y, b.w, 1);
+  }
+}
+function drawHeli(t) {
+  ctx.save(); ctx.translate(HELI_X, heli.y); ctx.rotate(heli.tilt);
+  // tail boom and tail rotor
+  ctx.fillStyle = "#2f6fd6"; ctx.fillRect(-30, -2, 22, 4);
+  ctx.fillStyle = "#cfd8e6"; const tr = Math.abs(Math.sin(t * 60)) * 6; ctx.fillRect(-32, -tr, 3, tr * 2);
+  // body
+  ctx.fillStyle = "#3b82f0"; ctx.beginPath(); ctx.ellipse(2, 0, 16, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.ellipse(-2, 2, 13, 4, 0, 0, Math.PI * 2); ctx.fill();
+  // cockpit glass
+  ctx.fillStyle = "#bfe9ff"; ctx.beginPath(); ctx.ellipse(9, -2, 7, 5, 0.2, 0, Math.PI * 2); ctx.fill();
+  // skids
+  ctx.fillStyle = "#cfd8e6"; ctx.fillRect(-10, 10, 24, 2); ctx.fillRect(-6, 7, 2, 3); ctx.fillRect(8, 7, 2, 3);
+  // main rotor (blurred sweep)
+  ctx.fillStyle = "#e8eef8"; ctx.fillRect(-2, -12, 2, 4);
+  const blade = 16 + Math.sin(t * 50) * 10;
+  ctx.globalAlpha = 0.8; ctx.fillRect(-blade, -13, blade * 2, 2); ctx.globalAlpha = 1;
+  ctx.restore();
+}
+function text(str, x, y, size, color, align = "left") { ctx.font = `${size}px "Press Start 2P", monospace`; ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(str, x, y); }
+
+function render(t) {
+  S = Math.min(W / VW, H / VH); OX = (W - VW * S) / 2; OY = (H - VH * S) / 2;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.translate(OX, OY); ctx.scale(S, S);
+  ctx.beginPath(); ctx.rect(0, 0, VW, VH); ctx.clip();
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, VW, VH);
+  drawWalls();
+  ctx.fillStyle = "#9a9a9a";
+  for (const s of smoke) { ctx.globalAlpha = s.life; ctx.fillRect(s.x - s.r / 2, s.y - s.r / 2, s.r, s.r); }
+  ctx.globalAlpha = 1;
+  if (state !== "dead" || deadT < 0.05) drawHeli(t);
+  for (const s of sparks) { ctx.fillStyle = s.life > 0.6 ? "#fff3a0" : s.life > 0.3 ? "#ff9a2e" : "#c0391b"; ctx.fillRect(s.x - 2, s.y - 2, 4, 4); }
+  // HUD on the bottom wall, like the classic
+  const d = Math.floor(dist / 10);
+  text(`DISTANCE: ${d}`, 10, VH - 10, 9, "#103a06");
+  text(`BEST: ${best}`, VW - 10, VH - 10, 9, "#103a06", "right");
+  if (state === "title") {
+    text("CHOPPER CAVE", VW / 2, 120, 22, "#ffffff", "center");
+    text("HOLD TO FLY UP", VW / 2, 200, 11, GREEN, "center");
+    text("LET GO TO DROP", VW / 2, 222, 11, GREEN, "center");
+    if (Math.sin(t * 5) > -0.3) text("TAP AND HOLD TO START", VW / 2, 268, 9, "#ffffff", "center");
+  }
+  if (state === "dead" && deadT > 0.5) {
+    text("CRASHED!", VW / 2, 140, 22, "#ffffff", "center");
+    text(`DISTANCE ${d}`, VW / 2, 182, 11, GREEN, "center");
+    if (d >= best && d > 0) text("NEW BEST!", VW / 2, 206, 11, "#ffe14d", "center");
+    if (deadT > 0.7 && Math.sin(t * 5) > -0.3) text("TAP TO FLY AGAIN", VW / 2, 250, 9, "#ffffff", "center");
+  }
+  if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.6})`; ctx.fillRect(0, 0, VW, VH); }
+  ctx.restore();
+  // portrait phones: suggest turning sideways for a bigger cave
+  if (H > W * 1.2) {
+    ctx.font = '10px "Press Start 2P", monospace'; ctx.fillStyle = "#5de03a"; ctx.textAlign = "center";
+    ctx.fillText("TURN YOUR PHONE SIDEWAYS", W / 2, OY + VH * S + 36);
+    ctx.fillText("FOR A BIGGER VIEW", W / 2, OY + VH * S + 56);
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.033, (now - last) / 1000); last = now;
+  update(dt); render(now / 1000);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
