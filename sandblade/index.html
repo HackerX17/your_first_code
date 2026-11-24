@@ -187,7 +187,10 @@ function buildIslands() {
   for (let k = 0; k <= 60; k++) {
     const I = isl(k), d = Math.min(k, 8) / 8, as = 0.85 + d * 0.45, ws = 1 - d * 0.12;
     const x0 = k === 0 ? -4000 : BOUNDS[k - 1] - 400, x1 = (k < END.length ? END[k] : x0 + 30000) + 400;
+    // islands after the first start on a rounded crest at the very edge, then one long smooth downhill
+    // into the regular hills, so a ramp jump lands you straight into momentum
     const xs = [x0], ys = [0]; let x = x0, i = 0;
+    if (k > 0) { xs[0] = BOUNDS[k - 1]; ys[0] = -320; x = xs[0] + 1300; xs.push(x); ys.push(220); }
     while (x < x1) {
       const w = (I.w[0] + Math.random() * (I.w[1] - I.w[0])) * ws;
       const big = Math.random() < 0.18 ? 1.35 : 1;                         // now and then a bigger launch hill
@@ -218,10 +221,6 @@ function groundY(x) {
     const u = (x - (E - RAMP)) / RAMP;
     if (u < 0.6) y = lerp(fIsland(k, E - RAMP), 480, smooth(u / 0.6));
     else { const t = (u - 0.6) / 0.4; y = lerp(480, -260, t * t); }
-  }
-  if (k > 0 && x < BOUNDS[k - 1] + LAND) {                          // landing slope on the next island
-    const S = BOUNDS[k - 1], target = fIsland(k, S + LAND), t = (x - S) / LAND;
-    y = lerp(target - 450, target, 1 - (1 - t) * (1 - t));
   }
   return y;
 }
@@ -467,11 +466,12 @@ function step(dt, auto) {
   const gy = groundY(p.x), a = Math.atan(slopeAt(p.x));
   if (p.y >= gy) {
     let res = { boost: 0 }, sprung = false;
-    if (p.launch) { p.launch = false; combo++; res = { boost: 260 }; burst(p.x, p.y, 40, 260, `rgba(${isl(islandAt(p.x)).spray},`, 0.9, 6); shake = 0.3; ring(p.x, p.y, isl(islandAt(p.x)).crest, 420, 0.8, 16); squash(8); }
+    if (p.launch) { p.launch = false; combo++; res = { boost: 260, keep: true }; burst(p.x, p.y, 40, 260, `rgba(${isl(islandAt(p.x)).spray},`, 0.9, 6); shake = 0.3; ring(p.x, p.y, isl(islandAt(p.x)).crest, 420, 0.8, 16); squash(8); }
     else if (!p.grounded && p.air > 0.2) { res = land(a); sprung = powers.spring > 0; }
     p.y = gy;
     const tx = Math.cos(a), ty = Math.sin(a);
     let s = p.vx * tx + p.vy * ty;
+    if (res.keep) s = Math.max(s, Math.hypot(p.vx, p.vy) * 0.95);   // island landings keep the flight's speed
     s = s * (1 - 0.025 * dt) + res.boost;
     const rk = islandAt(p.x);
     if (rk < END.length && p.x > END[rk] - RAMP * 0.4) s = Math.max(s, 1150);   // the ramp always gets you up
@@ -923,11 +923,21 @@ function drawPattern(I, pts, minY, sc) {
   }
 }
 
+// the front of each island rises out of the water as a rounded hill instead of a straight wall
+// (visual only: the ramp flight always clears it)
+function noseY(x, k) {
+  if (k >= BOUNDS.length) return null;
+  const d = BOUNDS[k] - x; if (d > 700 || d < 0) return null;
+  const top = groundY(BOUNDS[k] + 1), t = 1 - d / 700;
+  return lerp(WATER_Y + 80, top, (1 - Math.cos(Math.PI * t)) / 2);
+}
 function drawGround(sc) {
   // split the visible ground into one run per island so each keeps its own colours and pattern
   const runs = []; let cur = null;
   for (let sx = -6; sx <= W + 6; sx += 5) {
-    const wx = cam.x + sx / sc, g0 = groundY(wx), k = g0 >= ABYSS ? -1 : islandAt(wx), sy = (g0 - cam.y) * sc;
+    const wx = cam.x + sx / sc; let g0 = groundY(wx), k = islandAt(wx);
+    if (g0 >= ABYSS) { const nose = noseY(wx, k); if (nose !== null) { g0 = nose; k = k + 1; } else k = -1; }
+    const sy = (g0 - cam.y) * sc;
     if (!cur || cur.k !== k) { if (cur && cur.k >= 0 && k >= 0) cur.pts.push(sx, sy); cur = { k, pts: [] }; runs.push(cur); }
     cur.pts.push(sx, sy);
   }
