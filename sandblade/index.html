@@ -152,30 +152,54 @@ const store = {
 
 // ---------- terrain ----------
 let P1 = 0, P2 = 0, P3 = 0;
-// Islands: each has its own neon palette, hill shape and hill pattern.
+// Islands run through the rainbow. Each has its own palette, ground pattern and hill "feel":
+// w = how wide each slope is (half a wave), h = how tall the hills/valleys are.
 const ISLANDS = [
-  { name: "Neon Bay",        hill: ["#00e5ff", "#0066ff", "#16087a"], crest: "#9ffcff", pat: "bands",    sky: ["#05002a", "#2b0a7a", "#ff2bd6"], city: ["#1a0b55", "#260f78"], spray: "127,252,255", shape: [150, 0.0032, 48, 0.0081, 10, 0.020] },
-  { name: "Lime District",   hill: ["#b6ff00", "#00d45a", "#00402c"], crest: "#ecff7a", pat: "dots",     sky: ["#010f1f", "#0a3d66", "#00ffa8"], city: ["#06233d", "#0a3354"], spray: "200,255,120", shape: [115, 0.0044, 70, 0.0105, 14, 0.024] },
-  { name: "Magenta Heights", hill: ["#ff3de0", "#b000ff", "#3a0066"], crest: "#ffc2f7", pat: "stripes",  sky: ["#120020", "#4d006e", "#ff4fa3"], city: ["#2a0040", "#3d005c"], spray: "255,150,240", shape: [205, 0.0027, 55, 0.0072, 12, 0.019] },
-  { name: "Cyan Grid",       hill: ["#00ffd5", "#00a3ff", "#002a70"], crest: "#c8fff6", pat: "grid",     sky: ["#000a20", "#002a60", "#00e1ff"], city: ["#03183a", "#062452"], spray: "150,255,240", shape: [130, 0.0038, 85, 0.0092, 18, 0.026] },
-  { name: "Ultraviolet",     hill: ["#c94dff", "#6a00ff", "#1e0057"], crest: "#ecc2ff", pat: "chevrons", sky: ["#0a0018", "#2c0070", "#ff00e6"], city: ["#1c0042", "#2a0060"], spray: "225,170,255", shape: [175, 0.0031, 75, 0.0085, 16, 0.022] },
-  { name: "Acid Pier",       hill: ["#5dff2a", "#00b8a9", "#00334d"], crest: "#d4ffab", pat: "zigzag",   sky: ["#00121a", "#003a4d", "#3dff7a"], city: ["#022a33", "#033a47"], spray: "190,255,150", shape: [160, 0.0036, 95, 0.0098, 20, 0.028] }
+  { name: "Neon Bay",        hill: ["#00e5ff", "#0066ff", "#16087a"], crest: "#9ffcff", pat: "bands",    sky: ["#05002a", "#2b0a7a", "#ff2bd6"], city: ["#1a0b55", "#260f78"], spray: "127,252,255", w: [700, 950],  h: [100, 180] },
+  { name: "Lime District",   hill: ["#b6ff00", "#00d45a", "#00402c"], crest: "#ecff7a", pat: "dots",     sky: ["#010f1f", "#0a3d66", "#00ffa8"], city: ["#06233d", "#0a3354"], spray: "200,255,120", w: [620, 880],  h: [120, 210] },
+  { name: "Magenta Heights", hill: ["#ff3de0", "#b000ff", "#3a0066"], crest: "#ffc2f7", pat: "stripes",  sky: ["#120020", "#4d006e", "#ff4fa3"], city: ["#2a0040", "#3d005c"], spray: "255,150,240", w: [720, 1000], h: [150, 250] },
+  { name: "Sunset Strip",    hill: ["#ffb03a", "#ff5e1a", "#5a1400"], crest: "#ffe0a8", pat: "chevrons", sky: ["#1a0533", "#5a1a5e", "#ff7b2b"], city: ["#2a0b3a", "#3d1048"], spray: "255,190,120", w: [650, 900],  h: [130, 230] },
+  { name: "Golden Mile",     hill: ["#fff04a", "#ffb800", "#5c3a00"], crest: "#fffbc2", pat: "grid",     sky: ["#120a2e", "#3d2a6e", "#ffd23f"], city: ["#1d1440", "#2a1d58"], spray: "255,240,140", w: [850, 1150], h: [110, 190] },
+  { name: "Crimson Ridge",   hill: ["#ff4d5e", "#d1002e", "#45000f"], crest: "#ffc2c8", pat: "zigzag",   sky: ["#14000f", "#4a0a24", "#ff2e4d"], city: ["#2a0518", "#3a0a22"], spray: "255,140,150", w: [640, 880],  h: [170, 270] },
+  { name: "Cyan Grid",       hill: ["#00ffd5", "#00a3ff", "#002a70"], crest: "#c8fff6", pat: "grid",     sky: ["#000a20", "#002a60", "#00e1ff"], city: ["#03183a", "#062452"], spray: "150,255,240", w: [700, 960],  h: [140, 240] },
+  { name: "Coral Coast",     hill: ["#ff9a8b", "#ff4f7b", "#4d0a2a"], crest: "#ffd9d2", pat: "dots",     sky: ["#170326", "#52125a", "#ff8a6b"], city: ["#2b0a36", "#3a0f48"], spray: "255,180,170", w: [780, 1050], h: [120, 220] },
+  { name: "Ultraviolet",     hill: ["#c94dff", "#6a00ff", "#1e0057"], crest: "#ecc2ff", pat: "chevrons", sky: ["#0a0018", "#2c0070", "#ff00e6"], city: ["#1c0042", "#2a0060"], spray: "225,170,255", w: [680, 940],  h: [160, 260] },
+  { name: "Acid Pier",       hill: ["#5dff2a", "#00b8a9", "#00334d"], crest: "#d4ffab", pat: "stripes",  sky: ["#00121a", "#003a4d", "#3dff7a"], city: ["#022a33", "#033a47"], spray: "190,255,150", w: [640, 900],  h: [170, 280] }
 ];
 const isl = k => ISLANDS[k % ISLANDS.length];
-// Island k runs until its ramp lip END[k]; then open water until the next island
-// starts at BOUNDS[k] = END[k] + GAP.
+// Moon Chaser-style hills: a chain of alternating hilltops and valleys at random spacing and heights,
+// joined by cosine curves. Every downhill is one long clean slope, every top a rounded launch point,
+// and no slope is ever steeper than ~45 degrees.
 const GAP = 4200, RAMP = 2400, LAND = 1500, ABYSS = 1e5, WATER_Y = 900, STORM_GRACE = 120;
-let BOUNDS = [], END = [], PH = [];
+let BOUNDS = [], END = [], KP = [];
 function buildIslands() {
-  BOUNDS = []; END = []; PH = [];
+  BOUNDS = []; END = []; KP = [];
   let e = 11000;
   for (let k = 0; k < 60; k++) { END.push(e); BOUNDS.push(e + GAP); e += GAP + 10000 + (k + 1) * 1200; }
-  for (let k = 0; k <= 60; k++) PH.push([Math.random() * TAU, Math.random() * TAU, Math.random() * TAU]);
+  for (let k = 0; k <= 60; k++) {
+    const I = isl(k), d = Math.min(k, 8) / 8, as = 0.85 + d * 0.45, ws = 1 - d * 0.12;
+    const x0 = k === 0 ? -4000 : BOUNDS[k - 1] - 400, x1 = (k < END.length ? END[k] : x0 + 30000) + 400;
+    const xs = [x0], ys = [0]; let x = x0, i = 0;
+    while (x < x1) {
+      const w = (I.w[0] + Math.random() * (I.w[1] - I.w[0])) * ws;
+      const big = Math.random() < 0.18 ? 1.35 : 1;                         // now and then a bigger launch hill
+      let y = (i % 2 === 0 ? -1 : 0.85) * (I.h[0] + Math.random() * (I.h[1] - I.h[0])) * as * big;
+      const prev = ys[ys.length - 1], maxDy = 0.6 * w;                     // cap steepness (cosine slope = pi*dy/2w)
+      y = clamp(y, prev - maxDy, prev + maxDy);
+      x += w; xs.push(x); ys.push(y); i++;
+    }
+    KP.push({ xs, ys });
+  }
 }
 function islandAt(x) { let k = 0; while (k < BOUNDS.length && x >= BOUNDS[k]) k++; return k; }
 function fIsland(k, x) {
-  const sh = isl(k).shape, a = 0.85 + Math.min(k, 8) * 0.1, ph = PH[k];
-  return a * (sh[0] * Math.sin(x * sh[1] + ph[0]) + sh[2] * Math.sin(x * sh[3] + ph[1]) + sh[4] * Math.sin(x * sh[5] + ph[2]));
+  const P = KP[Math.min(k, KP.length - 1)], xs = P.xs, ys = P.ys;
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[xs.length - 1]) return ys[ys.length - 1];
+  let lo = 0, hi = xs.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (xs[m] <= x) lo = m; else hi = m; }
+  const t = (x - xs[lo]) / (xs[hi] - xs[lo]);
+  return ys[lo] + (ys[hi] - ys[lo]) * (1 - Math.cos(Math.PI * t)) / 2;
 }
 const smooth = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
 function groundY(x) {

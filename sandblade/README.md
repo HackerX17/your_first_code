@@ -10,7 +10,7 @@ Open `index.html` in any browser (phone or desktop). On a phone, use "Add to Hom
 - **Let go**: get light, launch off rises and glide
 - Desktop: Space or Down arrow
 
-Land smoothly on a downslope to chain combos; three in a row starts **Fever** (extra speed, double score and shards). Each **island** ends in a huge drop and a giant ramp that launches you across the water to the next island (new colours, hill shape and pattern), pushing the storm back. The storm gives you a 2 minute head start. Power-ups show up often, mostly Gale speed boosts and Skyward jumps, and most sit right on the ground so you ride through them.
+Land smoothly on a downslope to chain combos; three in a row starts **Fever** (extra speed, double score and shards). Each **island** ends in a huge drop and a giant ramp that launches you across the water to the next island (10 rainbow-coloured islands, each with its own pattern and smooth, rolling hills), pushing the storm back. The storm gives you a 2 minute head start. Power-ups show up often, mostly Gale speed boosts and Skyward jumps, and most sit right on the ground so you ride through them.
 
 ## Power-ups
 - **Gale**: full speed for a few seconds and pushes the storm back
