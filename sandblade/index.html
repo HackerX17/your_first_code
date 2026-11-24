@@ -252,7 +252,7 @@ function reset() {
   storm = { x: -3000, v: 0, woke: false };
   shards = []; particles = []; popups = []; trail = [];
   scarf = Array.from({ length: 8 }, () => ({ x: p.x, y: p.y - 50 }));
-  powers = { gale: 0, sky: 0, magnet: 0, ward: 0 }; pickups = []; nextPowerX = 900; fever = 0; islandIdx = 0; maxAlt = 0; skyMsg = false;
+  powers = { gale: 0, sky: 0, magnet: 0, ward: 0, warp: 0, prism: 0, spring: 0 }; pickups = []; nextPowerX = 900; fever = 0; islandIdx = 0; maxAlt = 0; skyMsg = false;
   rings = []; ghosts = []; arcPath = null; lightning = null; slowmo = 0; camPunch = 0;
   nextShardX = 900; elapsed = 0; shardCount = 0; trickScore = 0; combo = 0; comboTimer = 0; flashT = 0; shake = 0;
 }
@@ -466,9 +466,9 @@ function step(dt, auto) {
   p.x += p.vx * dt; p.y += p.vy * dt;
   const gy = groundY(p.x), a = Math.atan(slopeAt(p.x));
   if (p.y >= gy) {
-    let res = { boost: 0 };
+    let res = { boost: 0 }, sprung = false;
     if (p.launch) { p.launch = false; combo++; res = { boost: 260 }; burst(p.x, p.y, 40, 260, `rgba(${isl(islandAt(p.x)).spray},`, 0.9, 6); shake = 0.3; ring(p.x, p.y, isl(islandAt(p.x)).crest, 420, 0.8, 16); squash(8); }
-    else if (!p.grounded && p.air > 0.2) res = land(a);
+    else if (!p.grounded && p.air > 0.2) { res = land(a); sprung = powers.spring > 0; }
     p.y = gy;
     const tx = Math.cos(a), ty = Math.sin(a);
     let s = p.vx * tx + p.vy * ty;
@@ -478,6 +478,10 @@ function step(dt, auto) {
     s = clamp(s, MIN_SPEED, MAX_SPEED);
     p.vx = s * tx; p.vy = s * ty;
     p.grounded = true; p.air = 0;
+    if (sprung && !(rk < END.length && p.x > END[rk] - RAMP)) {     // Spring: bounce straight back up (not on the big ramp)
+      p.vy = -Math.min(1400, 750 + s * 0.35); p.y = gy - 1; p.grounded = false; p.air = 0.01;
+      ring(p.x, p.y, "#7dff3a", 160, 0.4, 8);
+    }
   } else if (gy >= ABYSS) {
     p.grounded = false; p.air += dt;
     const lk = islandAt(p.x);
@@ -562,7 +566,10 @@ const POWER = {
   gale:   { name: "Gale",    color: "#ffb347", glyph: "»", dur: 4 },
   sky:    { name: "Skyward", color: "#c9a6ff", glyph: "↑", dur: 3.5 },
   magnet: { name: "Magnet",  color: "#7fe0ff", glyph: "◎", dur: 8 },
-  ward:   { name: "Ward",    color: "#9ef0a6", glyph: "✦", dur: 0 }
+  ward:   { name: "Ward",    color: "#9ef0a6", glyph: "✦", dur: 0 },
+  warp:   { name: "Time Warp", color: "#ffe14d", glyph: "◷", dur: 6 },
+  prism:  { name: "Prism",   color: "#ff7bf0", glyph: "◇", dur: 10 },
+  spring: { name: "Spring",  color: "#7dff3a", glyph: "⇑", dur: 8 }
 };
 function spawnPickups(viewW) {
   while (nextPowerX < cam.x + viewW + 600) {
@@ -570,7 +577,8 @@ function spawnPickups(viewW) {
     if (kk < END.length && nextPowerX > END[kk] - RAMP) { nextPowerX = BOUNDS[kk] + 900; continue; }
     // two-thirds of power-ups are Gale speed boosts; the rest split between the others
     // mostly speed (Gale) and jump (Skyward) boosts
-    const r = Math.random(), type = r < 0.55 ? "gale" : r < 0.85 ? "sky" : r < 0.93 ? "magnet" : "ward";
+    // Gale 41%, Skyward 20%, Ward 14%, Time Warp 9%, Prism 8%, Spring 6%, Magnet 2%
+    const r = Math.random(), type = r < 0.41 ? "gale" : r < 0.61 ? "sky" : r < 0.75 ? "ward" : r < 0.84 ? "warp" : r < 0.92 ? "prism" : r < 0.98 ? "spring" : "magnet";
     // most sit right on the ground so you ride straight through them; a few hover just above
     const lift = Math.random() < 0.75 ? 42 : 100 + Math.random() * 60;
     pickups.push({ x: nextPowerX, y: groundY(nextPowerX) - lift, type, ph: Math.random() * TAU });
@@ -589,6 +597,12 @@ function collectPower(type) {
   }
   if (type === "magnet") { powers.magnet = P.dur; popup("MAGNET!  shards come to you", true); }
   if (type === "ward") { powers.ward = 1; popup("WARD!  the storm can't take you once", true); }
+  if (type === "warp") { powers.warp = P.dur; storm.x = Math.min(storm.x, p.x - 1200) - 1800; popup("TIME WARP!  storm thrown back and frozen", true); }
+  if (type === "prism") {
+    powers.prism = P.dur; popup("PRISM!  shards worth triple", true);
+    for (let i = 0; i < 14; i++) { const x = p.x + 260 + i * 95, g = groundY(x); if (g < ABYSS) shards.push({ x, y: g - 50, ph: Math.random() * TAU }); }
+  }
+  if (type === "spring") { powers.spring = P.dur; popup("SPRING!  every landing bounces", true); }
 }
 function chip(color, glyph, name, frac) {
   const C = 50.27, off = (C * (1 - Math.round(frac * 20) / 20)).toFixed(1);
@@ -596,7 +610,7 @@ function chip(color, glyph, name, frac) {
 }
 function renderPowers() {
   const el = $("powers"); let html = "";
-  for (const k of ["gale", "sky", "magnet", "ward"]) {
+  for (const k of ["gale", "sky", "magnet", "ward", "warp", "prism", "spring"]) {
     const v = powers[k]; if (v <= 0) continue;
     const P = POWER[k], frac = k === "ward" ? 1 : v / P.dur;
     html += chip(P.color, P.glyph, P.name, frac);
@@ -618,7 +632,7 @@ function update(dt) {
     else {
       if (!storm.woke) { storm.woke = true; popup("The storm is coming!", true); thud(); }
       storm.v = Math.min(220 + stormT * 4, 740);
-      storm.x += storm.v * dt;
+      storm.x += (powers.warp > 0 ? 0 : storm.v) * dt;          // Time Warp freezes the storm
       if (p.x - storm.x > 3000) storm.x = p.x - 3000;
     }
     if (p.x - storm.x < 0) {
@@ -633,7 +647,7 @@ function update(dt) {
       popup(`Island ${ik + 1} · ${isl(ik).name}`, true); popup(`Storm pushed back  +${bonus}`);
       flashT = 0.6; shake = 0.25; chord();
     }
-    for (const k of ["gale", "sky", "magnet"]) powers[k] = Math.max(0, powers[k] - dt);
+    for (const k of ["gale", "sky", "magnet", "warp", "prism", "spring"]) powers[k] = Math.max(0, powers[k] - dt);
     fever = Math.max(0, fever - dt);
     const alt = surf(p.x) - p.y;
     if (!p.grounded && alt > 1400 && !skyMsg) { skyMsg = true; popup(`Sky high!  ${Math.round(alt / 10)} m up`, true); trickScore += 300; }
@@ -706,7 +720,7 @@ function update(dt) {
     if (state !== "over" && Math.hypot(s.x - p.x, s.y - (p.y - 30)) < 52) {
       shards.splice(i, 1);
       if (playing) {
-        shardCount += fever > 0 ? 2 : 1;
+        shardCount += (fever > 0 ? 2 : 1) * (powers.prism > 0 ? 3 : 1);
         const sp = Math.hypot(p.vx, p.vy), k = Math.min(1, 1750 / (sp + 40));
         p.vx += 40 * Math.cos(p.rot) * k; p.vy += 40 * Math.sin(p.rot) * k;
         chime(comboTimer > 0 ? (shardCount % SCALE.length) : 0);
@@ -1216,7 +1230,10 @@ function drawPopups() {
   popups.forEach((pp, i) => {
     const a = pp.t < 0.15 ? pp.t / 0.15 : clamp(1 - (pp.t - 1.1) / 0.5, 0, 1);
     const y = H * 0.26 + i * 34 - pp.t * 12, pop = 0.6 + 0.4 * easeOutBack(pp.t / 0.3);
-    ctx.font = `${Math.round((pp.big ? 22 : 17) * pop)}px Audiowide, system-ui, sans-serif`;
+    let fs = (pp.big ? 22 : 17) * pop;
+    ctx.font = `${Math.round(fs)}px Audiowide, system-ui, sans-serif`;
+    const tw = ctx.measureText(pp.text).width;                            // shrink long messages to fit narrow phones
+    if (tw > W - 28) { fs *= (W - 28) / tw; ctx.font = `${Math.round(fs)}px Audiowide, system-ui, sans-serif`; }
     ctx.fillStyle = `rgba(255,43,214,${a * 0.55})`; ctx.fillText(pp.text, W / 2 + 1.5, y + 2);
     ctx.fillStyle = `rgba(255,250,238,${a})`; ctx.fillText(pp.text, W / 2, y);
   });

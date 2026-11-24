@@ -18,5 +18,8 @@ Land smoothly on a downslope to chain combos; three in a row starts **Fever** (e
 - **Skyward**: launches you sky high and lets you glide
 - **Magnet**: pulls nearby shards to you
 - **Ward**: saves you from the storm once
+- **Time Warp**: throws the storm far back and freezes it for 6 seconds
+- **Prism**: shards are worth triple for 10 seconds, plus a trail of shards ahead
+- **Spring**: for 8 seconds every landing bounces you back up
 
 Single file, no dependencies: HTML5 canvas and Web Audio.
