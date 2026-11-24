@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Night Arcade</title>
+<meta name="description" content="Six free browser games. Tap a game to play on your phone or computer.">
+<meta name="theme-color" content="#0a0420">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Audiowide&family=Jost:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one centred column; a neon title, then a grid of game cards that stacks to one column on phones. Single dark neon look. */
+:root {
+  --bg: #0a0420;
+  --card: #150b38;
+  --line: rgba(255,255,255,.12);
+  --ink: #f4efff;
+  --dim: #b7acd8;
+  --cyan: #00f0ff;
+  --magenta: #ff2bd6;
+  --display: "Audiowide", "Arial Black", system-ui, sans-serif;
+  --body: "Jost", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5;
+  background-image: radial-gradient(ellipse at 50% -10%, rgba(255,43,214,.25), transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(0,240,255,.12), transparent 50%); min-height: 100vh; }
+main { max-width: 980px; margin: 0 auto; padding-block: calc(env(safe-area-inset-top, 0px) + 48px) calc(env(safe-area-inset-bottom, 0px) + 48px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { margin: 0; font: 400 clamp(40px, 10vw, 76px)/1 var(--display); color: #b9fbff; text-shadow: 0 0 8px var(--cyan), 0 0 30px #00b3ff, 0 0 60px var(--magenta); text-wrap: balance; }
+.lede { margin: 14px 0 36px; max-width: 52ch; color: var(--dim); font-size: 18px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+.card { display: flex; flex-direction: column; gap: 10px; padding: 20px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); min-width: 0; }
+.card .tag { font: 600 12px var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--accent, var(--cyan)); }
+.card h2 { margin: 0; font: 400 26px/1.1 var(--display); }
+.card p { margin: 0; color: var(--dim); flex: 1; }
+.card .how { font-size: 14px; color: var(--ink); opacity: .8; }
+.play { align-self: flex-start; margin-top: 6px; display: inline-block; padding: 11px 26px; border-radius: 999px; color: #fff; text-decoration: none; font: 700 15px var(--body); letter-spacing: .12em; text-transform: uppercase;
+  background: linear-gradient(90deg, var(--magenta), #8a2bff 55%, #00c2ff); box-shadow: 0 0 16px rgba(255,43,214,.45); }
+.play:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+footer { margin-top: 40px; color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Night Arcade</h1>
+  <p class="lede">Six free games that run right in your browser, on a phone or a computer. Tap one to play. Tip: on a phone, use "Add to Home Screen" to keep your favourite like an app.</p>
+  <div class="grid">
+    <article class="card" style="--accent:#00f0ff">
+      <span class="tag">Hill rider</span><h2>Sandblade</h2>
+      <p>Dive down neon hills, launch off giant ramps from island to island, and outrun the storm.</p>
+      <span class="how">Hold to dive, let go to fly.</span>
+      <a class="play" href="sandblade/">Play</a>
+    </article>
+    <article class="card" style="--accent:#7dff3a">
+      <span class="tag">Wall climber</span><h2>Skyline Leap</h2>
+      <p>Run up between two towers, leap wall to wall, dodge window hazards and smash drones mid-air.</p>
+      <span class="how">Tap to leap.</span>
+      <a class="play" href="skyline-leap/">Play</a>
+    </article>
+    <article class="card" style="--accent:#ff2bd6">
+      <span class="tag">Crowd runner</span><h2>Sandblade Legion</h2>
+      <p>Steer your army through multiplier gates, blast through walls to the big bonus, and crush the horde.</p>
+      <span class="how">Tap or swipe to change lanes.</span>
+      <a class="play" href="sandblade-legion/">Play</a>
+    </article>
+    <article class="card" style="--accent:#ffd35c">
+      <span class="tag">Army flood</span><h2>Sandblade Siege</h2>
+      <p>Aim a cannon of soldiers through ×20 and ×999 gates and flood a million-strong horde.</p>
+      <span class="how">Drag to aim.</span>
+      <a class="play" href="sandblade-siege/">Play</a>
+    </article>
+    <article class="card" style="--accent:#5de03a">
+      <span class="tag">Retro classic</span><h2>Chopper Cave</h2>
+      <p>Fly through a green-walled cave as far as you can. Best played with the phone sideways.</p>
+      <span class="how">Hold to climb, let go to drop.</span>
+      <a class="play" href="chopper-cave/">Play</a>
+    </article>
+    <article class="card" style="--accent:#ffb63a">
+      <span class="tag">3D shooter</span><h2>Iron Sector</h2>
+      <p>Hold a ruined town against waves of soldiers with a rifle, frags and killstreaks. Best on a computer.</p>
+      <span class="how">WASD and mouse, or on-screen controls on phones.</span>
+      <a class="play" href="iron-sector/">Play</a>
+    </article>
+  </div>
+  <footer>Best scores are saved on your own device.</footer>
+</main>
+</body>
+</html>
