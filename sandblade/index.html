@@ -164,7 +164,7 @@ const ISLANDS = [
 const isl = k => ISLANDS[k % ISLANDS.length];
 // Island k runs until its ramp lip END[k]; then open water until the next island
 // starts at BOUNDS[k] = END[k] + GAP.
-const GAP = 4200, RAMP = 2400, LAND = 1500, ABYSS = 1e5, WATER_Y = 900, STORM_GRACE = 60;
+const GAP = 4200, RAMP = 2400, LAND = 1500, ABYSS = 1e5, WATER_Y = 900, STORM_GRACE = 120;
 let BOUNDS = [], END = [], PH = [];
 function buildIslands() {
   BOUNDS = []; END = []; PH = [];
@@ -220,7 +220,7 @@ function reset() {
   storm = { x: -3000, v: 0, woke: false };
   shards = []; particles = []; popups = []; trail = [];
   scarf = Array.from({ length: 8 }, () => ({ x: p.x, y: p.y - 50 }));
-  powers = { gale: 0, sky: 0, magnet: 0, ward: 0 }; pickups = []; nextPowerX = 2200; fever = 0; islandIdx = 0; maxAlt = 0; skyMsg = false;
+  powers = { gale: 0, sky: 0, magnet: 0, ward: 0 }; pickups = []; nextPowerX = 900; fever = 0; islandIdx = 0; maxAlt = 0; skyMsg = false;
   rings = []; ghosts = []; arcPath = null; lightning = null; slowmo = 0; camPunch = 0;
   nextShardX = 900; elapsed = 0; shardCount = 0; trickScore = 0; combo = 0; comboTimer = 0; flashT = 0; shake = 0;
 }
@@ -521,9 +521,10 @@ function spawnPickups(viewW) {
   while (nextPowerX < cam.x + viewW + 600) {
     const kk = islandAt(nextPowerX);
     if (kk < END.length && nextPowerX > END[kk] - RAMP) { nextPowerX = BOUNDS[kk] + 900; continue; }
-    const keys = Object.keys(POWER), type = keys[Math.floor(Math.random() * keys.length)];
+    // two-thirds of power-ups are Gale speed boosts; the rest split between the others
+    const others = ["sky", "magnet", "ward"], type = Math.random() < 0.66 ? "gale" : others[Math.floor(Math.random() * others.length)];
     pickups.push({ x: nextPowerX, y: groundY(nextPowerX) - 130 - Math.random() * 170, type, ph: Math.random() * TAU });
-    nextPowerX += 2600 + Math.random() * 2200;
+    nextPowerX += 870 + Math.random() * 730;
   }
 }
 function collectPower(type) {
