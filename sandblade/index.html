@@ -552,7 +552,7 @@ function spawnPickups(viewW) {
     // most sit right on the ground so you ride straight through them; a few hover just above
     const lift = Math.random() < 0.75 ? 42 : 100 + Math.random() * 60;
     pickups.push({ x: nextPowerX, y: groundY(nextPowerX) - lift, type, ph: Math.random() * TAU });
-    nextPowerX += 620 + Math.random() * 520;
+    nextPowerX += 1240 + Math.random() * 1040;
   }
 }
 function collectPower(type) {
