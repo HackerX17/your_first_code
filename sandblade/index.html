@@ -215,7 +215,7 @@ function reset() {
   seed = Math.random() * 1000;
   P1 = Math.random() * TAU; P2 = Math.random() * TAU; P3 = Math.random() * TAU;
   buildIslands();
-  p = { x: 0, y: groundY(0), vx: 380, vy: 0, rot: 0, grounded: true, air: 0, spin: 0, launch: false };
+  p = { x: 0, y: groundY(0), vx: 560, vy: 0, rot: 0, grounded: true, air: 0, spin: 0, launch: false };
   cam = { x: -200, y: groundY(0) - 400, zoom: 1 };
   storm = { x: -3000, v: 0, woke: false };
   shards = []; particles = []; popups = []; trail = [];
@@ -361,7 +361,7 @@ function spawnShards() {
 // ---------- physics ----------
 // Hold = heavy (dive). Release = light (launch and glide). Smooth landings on
 // downslopes keep momentum and chain into Fever; slamming into a rise costs speed.
-const HOLD_G = 3.1, AIR_G = 0.78, MAX_SPEED = 2700, MIN_SPEED = 190;
+const HOLD_G = 3.1, AIR_G = 0.78, MAX_SPEED = 2700, MIN_SPEED = 300, CRUISE = 680;
 
 function land(a) {
   const vAng = Math.atan2(p.vy, p.vx), d = Math.abs(wrap(vAng - a));
@@ -414,6 +414,7 @@ function step(dt, auto) {
   const sp = Math.hypot(p.vx, p.vy) || 1;
   if (!p.launch && powers.gale > 0 && sp < 2300) { p.vx += p.vx / sp * 1500 * dt; p.vy += p.vy / sp * 1500 * dt; }
   if (!p.launch && fever > 0 && sp < 1900) { p.vx += p.vx / sp * 450 * dt; p.vy += p.vy / sp * 450 * dt; }
+  if (!p.launch && p.grounded && sp < CRUISE) { p.vx += p.vx / sp * 240 * dt; p.vy += p.vy / sp * 240 * dt; }   // higher base speed: always eases back up to cruising pace
 
   const wasGrounded = p.grounded;
   p.x += p.vx * dt; p.y += p.vy * dt;
@@ -522,9 +523,12 @@ function spawnPickups(viewW) {
     const kk = islandAt(nextPowerX);
     if (kk < END.length && nextPowerX > END[kk] - RAMP) { nextPowerX = BOUNDS[kk] + 900; continue; }
     // two-thirds of power-ups are Gale speed boosts; the rest split between the others
-    const others = ["sky", "magnet", "ward"], type = Math.random() < 0.66 ? "gale" : others[Math.floor(Math.random() * others.length)];
-    pickups.push({ x: nextPowerX, y: groundY(nextPowerX) - 130 - Math.random() * 170, type, ph: Math.random() * TAU });
-    nextPowerX += 870 + Math.random() * 730;
+    // mostly speed (Gale) and jump (Skyward) boosts
+    const r = Math.random(), type = r < 0.55 ? "gale" : r < 0.85 ? "sky" : r < 0.93 ? "magnet" : "ward";
+    // most sit right on the ground so you ride straight through them; a few hover just above
+    const lift = Math.random() < 0.75 ? 42 : 100 + Math.random() * 60;
+    pickups.push({ x: nextPowerX, y: groundY(nextPowerX) - lift, type, ph: Math.random() * TAU });
+    nextPowerX += 620 + Math.random() * 520;
   }
 }
 function collectPower(type) {
@@ -669,7 +673,7 @@ function update(dt) {
   for (let i = pickups.length - 1; i >= 0; i--) {
     const q = pickups[i];
     if (q.x < cam.x - 300) { pickups.splice(i, 1); continue; }
-    if (playing && Math.hypot(q.x - p.x, q.y - (p.y - 30)) < 70) { pickups.splice(i, 1); collectPower(q.type); }
+    if (playing && Math.hypot(q.x - p.x, q.y - (p.y - 30)) < 85) { pickups.splice(i, 1); collectPower(q.type); }
   }
   for (const pp of popups) pp.t += dt;
   while (popups.length && popups[0].t > 1.6) popups.shift();
