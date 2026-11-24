@@ -64,6 +64,7 @@ canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
 .result h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(30px, 8vw, 48px); letter-spacing: .06em; text-wrap: balance; }
 .result p { margin: 0; font-size: 17px; }
 .result strong { font-family: var(--display); font-weight: 400; font-size: 30px; }
+.cta.ghost { background: rgba(20,10,40,.6); box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); font-size: 14px; padding: 12px 32px; }
 </style>
 
 <canvas id="c" aria-label="Sandblade Legion game"></canvas>
@@ -71,6 +72,7 @@ canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
 <div class="hud" id="hud" hidden>
   <span class="lvl" id="lvl">Level 1</span>
   <div class="prog"><i id="progBar"></i></div>
+  <button class="iconbtn" id="pauseBtn" aria-label="Pause">II</button>
   <button class="iconbtn" id="mute" aria-label="Toggle sound">♪</button>
 </div>
 
@@ -80,6 +82,12 @@ canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
   <div class="how"><b>Tap a lane</b> or drag to steer. Blue gates grow your legion, <em>red gates</em> shrink it. Your riders fire on their own: shoot gates to raise them, and break the wall to reach the big bonus. Then crush the storm horde.</div>
   <button class="cta" id="play">March</button>
   <div class="sub" id="menuLvl"></div>
+</div>
+
+<div class="overlay result" id="pauseMenu" hidden>
+  <h2>Paused</h2>
+  <button class="cta" id="resume">Resume</button>
+  <button class="cta ghost" id="restart">Restart</button>
 </div>
 
 <div class="overlay result" id="win" hidden>
@@ -235,6 +243,7 @@ function setLane(l) {
 }
 addEventListener("pointerdown", e => {
   if (e.target.closest && e.target.closest("button")) return;
+  if (paused) return;
   initAudio();
   touch = { id: e.pointerId, x0: e.clientX, before: lane, swiping: false };
   setLane(laneFromX(e.clientX));
@@ -263,7 +272,7 @@ function updateMenu() { $("menuLvl").textContent = level === 1 ? "Level 1 · Meg
 updateMenu();
 
 function start() {
-  initAudio(); reset(); phase = "run";
+  initAudio(); reset(); phase = "run"; paused = false; $("pauseMenu").hidden = true;
   ["menu", "win", "lose", "logo"].forEach(id => $(id).hidden = true);
   $("hud").hidden = false; $("lvl").textContent = level === 1 ? "Mega level" : `Level ${level}`;
   if (level === 1) floatText("MEGA LEVEL", "#ffe39a", W / 2, H * 0.3, true);
@@ -644,9 +653,21 @@ function render(t) {
 
 reset();
 let last = performance.now();
+// ---------- pause ----------
+let paused = false;
+function setPaused(on) {
+  if (on && !(phase === "run" || phase === "clash")) return;
+  paused = on; document.getElementById("pauseMenu").hidden = !on;
+  if (on) { touch = null; }
+}
+document.getElementById("pauseBtn").addEventListener("click", () => setPaused(true));
+document.getElementById("resume").addEventListener("click", () => setPaused(false));
+document.getElementById("restart").addEventListener("click", () => { setPaused(false); start(); });
+addEventListener("keydown", e => { if (e.code === "Escape" || e.code === "KeyP") setPaused(!paused); }, true);
+document.addEventListener("visibilitychange", () => { if (document.hidden) setPaused(true); });
 function frame(now) {
   const dt = Math.min(0.033, (now - last) / 1000); last = now;
-  update(dt); render(now / 1000);
+  if (!paused) update(dt); render(now / 1000);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

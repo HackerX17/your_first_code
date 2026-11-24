@@ -66,13 +66,14 @@ canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
 .statsgrid span { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; opacity: .85; }
 .statsgrid strong { font-family: var(--display); font-weight: 400; font-size: 26px; color: #b9fbff; }
 .newbest { color: var(--lime); letter-spacing: .2em; text-transform: uppercase; font-size: 13px; font-weight: 700; }
+.cta.ghost { background: rgba(20,10,40,.6); box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); font-size: 14px; padding: 12px 32px; }
 </style>
 
 <canvas id="c" aria-label="Skyline Leap game"></canvas>
 
 <div class="hud" id="hud" hidden>
   <div class="stat"><span class="big" id="height">0 m</span><span class="small" id="scoreLbl">Score 0</span><div class="powers" id="powers"></div></div>
-  <div class="right"><div class="coins"><i></i><span id="coinCount">0</span></div><button class="iconbtn" id="mute" aria-label="Toggle sound">♪</button></div>
+  <div class="right"><div class="coins"><i></i><span id="coinCount">0</span></div><button class="iconbtn" id="pauseBtn" aria-label="Pause">II</button><button class="iconbtn" id="mute" aria-label="Toggle sound">♪</button></div>
 </div>
 
 <div class="logo" id="logo"><h1>Skyline<br>Leap</h1><p>Run the walls</p></div>
@@ -81,6 +82,12 @@ canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
   <div class="how"><b>Tap</b> to leap to the other wall.<br>Dodge what sticks out of the windows. <b>Smash drones</b> and falling junk in mid-air for big points, and grab power-ups on the way up.</div>
   <button class="cta" id="play">Climb</button>
   <div class="sub" id="bestMenu"></div>
+</div>
+
+<div class="overlay over" id="pauseMenu" hidden>
+  <h2>Paused</h2>
+  <button class="cta" id="resume">Resume</button>
+  <button class="cta ghost" id="restart">Restart</button>
 </div>
 
 <div class="overlay over" id="over" hidden>
@@ -175,7 +182,7 @@ function setMuted(m) { muted = m; store.set("skyline-muted", m ? "1" : "0"); $("
 function tap(e) {
   if (e && e.target && e.target.closest && e.target.closest("button")) return;
   initAudio();
-  if (state !== "play" || p.dead) return;
+  if (state !== "play" || p.dead || paused) return;
   if (!tryJump()) tapBuffer = 0.18;                 // tap a little early and it still counts
 }
 addEventListener("pointerdown", tap, { passive: true });
@@ -192,7 +199,7 @@ function tryJump() {
 }
 
 function start() {
-  initAudio(); reset(); state = "play";
+  initAudio(); reset(); state = "play"; paused = false; $("pauseMenu").hidden = true;
   $("menu").hidden = true; $("over").hidden = true; $("logo").hidden = true; $("hud").hidden = false;
   popup(`${DISTRICTS[0].name}`, true);
 }
@@ -663,13 +670,25 @@ $("play").addEventListener("click", start);
 $("again").addEventListener("click", start);
 setMuted(muted); showBest(); resize(); reset();
 let last = performance.now(), ftAvg = 16, slowFor = 0;
+// ---------- pause ----------
+let paused = false;
+function setPaused(on) {
+  if (on && !(state === "play" && !p.dead)) return;
+  paused = on; document.getElementById("pauseMenu").hidden = !on;
+  if (on) { tapBuffer = 0; }
+}
+document.getElementById("pauseBtn").addEventListener("click", () => setPaused(true));
+document.getElementById("resume").addEventListener("click", () => setPaused(false));
+document.getElementById("restart").addEventListener("click", () => { setPaused(false); start(); });
+addEventListener("keydown", e => { if (e.code === "Escape" || e.code === "KeyP") setPaused(!paused); }, true);
+document.addEventListener("visibilitychange", () => { if (document.hidden) setPaused(true); });
 function frame(now) {
   const raw = now - last, dt = Math.min(0.033, raw / 1000); last = now;
   ftAvg = ftAvg * 0.94 + Math.min(raw, 100) * 0.06;
   slowFor = ftAvg > 24 ? slowFor + dt : Math.max(0, slowFor - dt);
   if (slowFor > 2 && QUALITY.bloom) { QUALITY.bloom = false; QUALITY.ghosts = false; QUALITY.cap = 160; }
   let ts = 1; if (slowmo > 0) { slowmo -= dt; ts = 0.35; }
-  update(dt * ts);
+  if (!paused) update(dt * ts);
   render(now / 1000);
   requestAnimationFrame(frame);
 }

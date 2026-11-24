@@ -15,6 +15,7 @@
   --retro: "Press Start 2P", "Courier New", monospace;
   color-scheme: dark;
 }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--retro);
@@ -26,11 +27,17 @@ canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
   position: fixed; z-index: 5; right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   width: 40px; height: 40px; border: 2px solid var(--green); background: #000; color: var(--green); font: 12px var(--retro); cursor: pointer;
 }
+#pauseBtn { right: calc(env(safe-area-inset-right, 0px) + 60px); }
+.pausebox { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: rgba(0,0,0,.72); font: 22px var(--retro); color: var(--text); }
+.pausebox button { font: 12px var(--retro); color: var(--green); background: #000; border: 2px solid var(--green); padding: 14px 22px; cursor: pointer; min-width: 180px; }
+.pausebox button:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 .mute:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 </style>
 
 <canvas id="c" aria-label="Chopper Cave game. Hold to fly up, let go to drop."></canvas>
+<button class="mute" id="pauseBtn" aria-label="Pause">II</button>
 <button class="mute" id="mute" aria-label="Toggle sound">♪</button>
+<div class="pausebox" id="pauseMenu" hidden><div>PAUSED</div><button id="resume">RESUME</button><button id="restart">RESTART</button></div>
 
 <script>
 (() => {
@@ -106,6 +113,7 @@ setMuted(muted);
 // ---------- input: hold anywhere ----------
 function press(e) {
   if (e && e.target && e.target.closest && e.target.closest("button")) return;
+  if (paused) return;
   initAudio(); hold = true;
   if (state === "title" || (state === "dead" && deadT > 0.7)) { reset(); state = "play"; }
 }
@@ -252,9 +260,21 @@ function render(t) {
 }
 
 let last = performance.now();
+// ---------- pause ----------
+let paused = false;
+function setPaused(on) {
+  if (on && !(state === "play")) return;
+  paused = on; document.getElementById("pauseMenu").hidden = !on;
+  if (on) { hold = false; if (rotorGain) rotorGain.gain.setTargetAtTime(0, actx.currentTime, 0.03); }
+}
+document.getElementById("pauseBtn").addEventListener("click", () => setPaused(true));
+document.getElementById("resume").addEventListener("click", () => setPaused(false));
+document.getElementById("restart").addEventListener("click", () => { setPaused(false); reset(); state = "play"; });
+addEventListener("keydown", e => { if (e.code === "Escape" || e.code === "KeyP") setPaused(!paused); }, true);
+document.addEventListener("visibilitychange", () => { if (document.hidden) setPaused(true); });
 function frame(now) {
   const dt = Math.min(0.033, (now - last) / 1000); last = now;
-  update(dt); render(now / 1000);
+  if (!paused) update(dt); render(now / 1000);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
